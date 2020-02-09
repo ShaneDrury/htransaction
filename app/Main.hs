@@ -15,6 +15,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as S
 import Polysemy
 import Polysemy.Embed
+import Polysemy.Input
 import Polysemy.Output
 import Data.Either
 import qualified Data.Csv as CSV
@@ -41,14 +42,9 @@ data TransactionsEndpoint = TransactionsEndpoint {
   bank_transactions :: [Transaction]
                                                  } deriving (Eq, Generic, Show, FromJSON)
 
-data TransactionsProvider m a where
-  GetTransactions :: TransactionsProvider m [Transaction]
-
-makeSem ''TransactionsProvider
-
-runTransactionsProviderOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (TransactionsProvider ': r) a -> Sem r a
+runTransactionsProviderOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (Input [Transaction] ': r) a -> Sem r a
 runTransactionsProviderOnFile fp = interpret $ \case
-  GetTransactions -> embed $ bank_transactions <$> fromRight undefined <$> eitherDecodeFileStrict fp
+  Input -> embed $ bank_transactions <$> fromRight undefined <$> eitherDecodeFileStrict fp
 
 runOutputOnCsv :: (Members '[Embed IO] r) => FilePath -> Sem (Output S.ByteString ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
@@ -57,9 +53,9 @@ runOutputOnCsv fp = interpret $ \case
 runapp outfile sem = runM . runOutputOnCsv outfile . runTransactionsProviderOnFile
   ("/Users" </> "shanedrury" </> "repos" </> "htransaction" </> "sample.json") $ sem
 
-app :: (Members '[Embed IO, TransactionsProvider, Output S.ByteString] r) => Sem r ()
+app :: (Members '[Embed IO, Input [Transaction], Output S.ByteString] r) => Sem r ()
 app = do
-  transactions <- getTransactions
+  transactions <- input
   let csv = CSV.encode transactions
   output csv
 
