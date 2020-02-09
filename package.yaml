@@ -29,6 +29,7 @@ dependencies:
 - bytestring
 - polysemy-plugin
 - cassava
+- filepath
 
 library:
   source-dirs: src
