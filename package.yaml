@@ -24,7 +24,7 @@ dependencies:
 - polysemy
 - containers
 - aeson
-- optparse-applicative
+- optparse-generic
 - time
 - bytestring
 - polysemy-plugin
