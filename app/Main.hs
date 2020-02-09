@@ -12,6 +12,7 @@ import Data.Time
 import GHC.Generics
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Lazy.Char8 as S
 import Polysemy
 import Polysemy.Embed
@@ -45,22 +46,33 @@ data TransactionsEndpoint = TransactionsEndpoint {
   bank_transactions :: [Transaction]
                                                  } deriving (Eq, Generic, Show, FromJSON)
 
-runTransactionsProviderOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (Input [Transaction] ': r) a -> Sem r a
-runTransactionsProviderOnFile fp = interpret $ \case
-  Input -> embed $ bank_transactions <$> fromRight undefined <$> eitherDecodeFileStrict fp
+runInputOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
+runInputOnFile fp = interpret $ \case
+  Input -> do
+    er <- embed $ eitherDecodeFileStrict fp
+    return $ bank_transactions <$> er
 
 runOutputOnCsv :: (Members '[Embed IO] r) => FilePath -> Sem (Output S.ByteString ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
   Output csv -> embed $ S.writeFile fp csv
 
-runapp Args{..} sem = runM . runOutputOnCsv outfile . runTransactionsProviderOnFile
-  ("/Users" </> "shanedrury" </> "repos" </> "htransaction" </> "sample.json") $ sem
+runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
+runInputOnStdin = interpret $ \case
+  Input -> do
+    json <- embed BS.getContents
+    return $ bank_transactions <$> eitherDecodeStrict json
 
-app :: (Members '[Embed IO, Input [Transaction], Output S.ByteString] r) => Sem r ()
+-- runapp Args{..} sem = runM . runOutputOnCsv outfile . runInputOnFile
+--   ("/Users" </> "shanedrury" </> "repos" </> "htransaction" </> "sample.json") $ sem
+
+runapp Args{..} sem = runM . runOutputOnCsv outfile . runInputOnStdin $ sem
+
+app :: (Members '[Embed IO, Input (Either String [Transaction]), Output S.ByteString] r) => Sem r ()
 app = do
   transactions <- input
-  let csv = CSV.encode transactions
-  output csv
+  case transactions of
+    Left e -> embed $ print e
+    Right tx -> output (CSV.encode tx)
 
 main :: IO ()
 main = do
