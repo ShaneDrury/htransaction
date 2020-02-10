@@ -35,10 +35,13 @@ data Transaction = Transaction {
 
 data Args = Args {
   outfile :: FilePath,
-  configFile :: FilePath
+  configFile :: FilePath,
+  verbose :: Bool
                        } deriving (Eq, Generic, Show)
 
 data LastImported = LastImported Day deriving (Eq, Show)
+
+data Message = Message String deriving (Eq, Show)
 
 data Config = Config {
   lastImportedDate :: LastImported
@@ -59,9 +62,11 @@ runInputOnFile fp = interpret $ \case
     er <- embed $ eitherDecodeFileStrict fp
     return $ bank_transactions <$> er
 
-runOutputOnCsv :: (Members '[Embed IO] r) => FilePath -> Sem (Output S.ByteString ': r) a -> Sem r a
+runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output S.ByteString ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
-  Output csv -> embed $ S.writeFile fp csv
+  Output csv -> do
+    output $ Message $ "Writing to " ++ fp
+    embed $ S.writeFile fp csv
 
 runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output S.ByteString ': r) a -> Sem r a
 runOutputOnStdout = interpret $ \case
@@ -71,9 +76,11 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImpo
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile fp = interpret $ \case
-  Output (LastImported day) -> embed $ writeFile fp (show day)
+  Output (LastImported day) -> do
+    output $ Message $ "Writing last imported day of " ++ (show day) ++ " to " ++ fp
+    embed $ writeFile fp (show day)
 
 runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
 runInputOnStdin = interpret $ \case
@@ -81,17 +88,22 @@ runInputOnStdin = interpret $ \case
     json <- embed BS.getContents
     return $ bank_transactions <$> eitherDecodeStrict json
 
-runapp Args{..} sem = runM . runOutputLastImportedOnFile configFile . runOutputOnCsv outfile . runInputOnStdin $ sem
+runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a -> Sem r a
+runOutputOnLog verbose = interpret $ \case
+  Output (Message msg) -> embed $ when verbose (putStrLn msg)
+
+runapp Args{..} sem = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile . runOutputOnCsv outfile . runInputOnStdin $ sem
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
 
-app :: (Members '[Embed IO, Input (Either String [Transaction]), Output S.ByteString, Output LastImported] r) => Sem r ()
+app :: (Members '[Embed IO, Input (Either String [Transaction]), Output S.ByteString, Output LastImported, Output Message] r) => Sem r ()
 app = do
   transactions <- input
   case transactions of
     Left e -> embed $ print e
     Right tx -> do
+      output $ Message $ "Number of transactions: " ++ show (length tx)
       when (length tx >= 1) (output (latestTransaction tx))
       output (CSV.encode tx)
 
