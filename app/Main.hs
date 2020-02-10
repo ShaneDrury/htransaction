@@ -33,8 +33,8 @@ data Transaction = Transaction {
                                  } deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
 
 data Args = Args {
-  outfile :: FilePath,
-  importFrom :: Day
+  outfile :: FilePath
+  --importFrom :: Day
                        } deriving (Eq, Generic, Show)
 
 instance ParseRecord Args where
@@ -56,16 +56,19 @@ runOutputOnCsv :: (Members '[Embed IO] r) => FilePath -> Sem (Output S.ByteStrin
 runOutputOnCsv fp = interpret $ \case
   Output csv -> embed $ S.writeFile fp csv
 
+runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output S.ByteString ': r) a -> Sem r a
+runOutputOnStdout = interpret $ \case
+  Output csv -> embed $ S.putStrLn csv
+
 runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
 runInputOnStdin = interpret $ \case
   Input -> do
     json <- embed BS.getContents
     return $ bank_transactions <$> eitherDecodeStrict json
 
--- runapp Args{..} sem = runM . runOutputOnCsv outfile . runInputOnFile
---   ("/Users" </> "shanedrury" </> "repos" </> "htransaction" </> "sample.json") $ sem
-
 runapp Args{..} sem = runM . runOutputOnCsv outfile . runInputOnStdin $ sem
+
+-- runapp Args{..} sem = runM . runOutputOnStdout . runInputOnStdin $ sem
 
 app :: (Members '[Embed IO, Input (Either String [Transaction]), Output S.ByteString] r) => Sem r ()
 app = do
@@ -78,3 +81,6 @@ main :: IO ()
 main = do
   options <- getRecord "Test program"
   runapp options app
+
+-- TODO: Inspect last transaction date and create last_date from that, otherwise we'll lose transactions
+
