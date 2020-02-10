@@ -1,60 +1,74 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE LambdaCase, BlockArguments, ScopedTypeVariables #-}
-{-# LANGUAGE GADTs, FlexibleContexts, TypeOperators, DataKinds, PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Main where
 
-import Lib
+import Control.Monad
+import Data.Aeson
+import qualified Data.ByteString as BSS
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as S
+import qualified Data.Csv as CSV
+import Data.Either
+import Data.List
+import Data.Ord
+import Data.Semigroup ((<>))
 import Data.Time
 import GHC.Generics
-import Data.Aeson
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString as BSS
-import qualified Data.ByteString.Lazy.Char8 as S
+import Lib
+import Options.Generic
 import Polysemy
 import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
-import Data.Either
-import qualified Data.Csv as CSV
 import System.FilePath
-import Data.Semigroup ((<>))
-import Options.Generic
-import Data.List
-import Data.Ord
-import Control.Monad
 
-data Transaction = Transaction {
-  dated_on :: Day,
-  description :: String,
-  amount :: String
-                                 } deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
+data Transaction
+  = Transaction
+      { dated_on :: Day,
+        description :: String,
+        amount :: String
+      }
+  deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
 
-data Args = Args {
-  outfile :: FilePath,
-  configFile :: FilePath,
-  verbose :: Bool
-                       } deriving (Eq, Generic, Show)
+data Args
+  = Args
+      { outfile :: FilePath,
+        configFile :: FilePath,
+        verbose :: Bool
+      }
+  deriving (Eq, Generic, Show)
 
 data LastImported = LastImported Day deriving (Eq, Show)
 
 data Message = Message String deriving (Eq, Show)
 
-data Config = Config {
-  lastImportedDate :: LastImported
-                     } deriving (Eq, Generic, Show)
+data Config
+  = Config
+      { lastImportedDate :: LastImported
+      }
+  deriving (Eq, Generic, Show)
 
-instance ParseRecord Args where
+instance ParseRecord Args
 
 instance CSV.ToField Day where
   toField d = BS.pack $ showGregorian d
 
-data TransactionsEndpoint = TransactionsEndpoint {
-  bank_transactions :: [Transaction]
-                                                 } deriving (Eq, Generic, Show, FromJSON)
+data TransactionsEndpoint
+  = TransactionsEndpoint
+      { bank_transactions :: [Transaction]
+      }
+  deriving (Eq, Generic, Show, FromJSON)
 
 runInputOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
 runInputOnFile fp = interpret $ \case
@@ -92,7 +106,7 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
 
-runapp Args{..} sem = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile . runOutputOnCsv outfile . runInputOnStdin $ sem
+runapp Args {..} sem = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile . runOutputOnCsv outfile . runInputOnStdin $ sem
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
