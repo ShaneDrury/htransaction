@@ -14,6 +14,7 @@
 module Main where
 
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Aeson
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Char8 as BS
@@ -26,6 +27,7 @@ import Data.Semigroup ((<>))
 import Data.Time
 import GHC.Generics
 import Lib
+import Network.HTTP.Req
 import Options.Generic
 import Polysemy
 import Polysemy.Embed
@@ -45,19 +47,21 @@ data Args
   = Args
       { outfile :: FilePath,
         configFile :: FilePath,
-        verbose :: Bool
+        verbose :: Bool,
+        bankAccountId :: Int
       }
   deriving (Eq, Generic, Show)
 
-newtype LastImported = LastImported Day deriving (Eq, Show)
+newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
 newtype Message = Message String deriving (Eq, Show)
 
-newtype Config
+data Config
   = Config
-      { lastImportedDate :: LastImported
+      { lastImportedDate :: LastImported,
+        token :: String
       }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic, Show, FromJSON, ToJSON)
 
 instance ParseRecord Args
 
@@ -90,11 +94,11 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImpo
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output LastImported ': r) a -> Sem r a
-runOutputLastImportedOnFile fp = interpret $ \case
-  Output (LastImported day) -> do
+runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Config -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile fp originalConfig = interpret $ \case
+  Output day -> do
     output $ Message $ "Writing last imported day of " ++ show day ++ " to " ++ fp
-    embed $ writeFile fp (show day)
+    embed $ S.writeFile fp (encode (originalConfig {lastImportedDate = day}))
 
 runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
 runInputOnStdin = interpret $ \case
@@ -102,11 +106,31 @@ runInputOnStdin = interpret $ \case
     json <- embed BS.getContents
     return $ bank_transactions <$> eitherDecodeStrict json
 
+runInputOnNetwork :: (Members '[Embed IO] r) => Int -> LastImported -> BS.ByteString -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
+runInputOnNetwork bankAccountId fromDate token = interpret $ \case
+  Input -> (fmap Right) <$> embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
+
+getTransactions :: Int -> LastImported -> BS.ByteString -> IO TransactionsEndpoint
+getTransactions bankAccountId (LastImported day) token = runReq defaultHttpConfig $ do
+  r <-
+    req
+      GET
+      (https "api.freeagent.com" /: "v2" /: "bank_transactions")
+      NoReqBody
+      jsonResponse
+      ( "bank_account" =: bankAccountId
+          <> "from_date" =: day
+          <> "sort" =: ("dated_on" :: Text)
+          <> oAuth2Bearer token
+          <> header "User-Agent" ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
+      )
+  return (responseBody r :: TransactionsEndpoint)
+
 runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a -> Sem r a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
 
-runapp Args {..} = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile . runOutputOnCsv outfile . runInputOnStdin
+runapp Args {..} config@Config {..} = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile config . runOutputOnCsv outfile . runInputOnNetwork bankAccountId lastImportedDate (BS.pack token)
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
@@ -121,7 +145,14 @@ app = do
       unless (null tx) (output (latestTransaction tx))
       output (CSV.encode tx)
 
+getConfig :: FilePath -> IO (Either String Config)
+getConfig fp = eitherDecodeFileStrict fp
+
 main :: IO ()
 main = do
   options <- getRecord "Test program"
-  runapp options app
+  config <- getConfig (configFile options)
+  case config of
+    Left e -> print e
+    Right cfg -> do
+      runapp options cfg app
