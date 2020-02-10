@@ -30,6 +30,7 @@ dependencies:
 - polysemy-plugin
 - cassava
 - filepath
+- http-conduit
 
 library:
   source-dirs: src
