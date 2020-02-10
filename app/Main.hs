@@ -34,6 +34,8 @@ import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
 import System.FilePath
+import qualified Data.Map as Map
+import Data.Maybe
 
 data Transaction
   = Transaction
@@ -61,7 +63,8 @@ log' msg = output $ Message msg
 
 data Config
   = Config
-      { lastImportedDate :: LastImported,
+      {
+        bankAccounts :: Map.Map Int LastImported,
         token :: String
       }
   deriving (Eq, Generic, Show, FromJSON, ToJSON)
@@ -97,11 +100,14 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImpo
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Config -> Sem (Output LastImported ': r) a -> Sem r a
-runOutputLastImportedOnFile fp originalConfig = interpret $ \case
+updateConfig :: Config -> Int -> LastImported -> Config
+updateConfig original bankAccount day = original {bankAccounts = Map.insert bankAccount day (bankAccounts original)}
+
+runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Config -> Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile fp originalConfig bankAccountId = interpret $ \case
   Output day -> do
     log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
-    embed $ S.writeFile fp (encode (originalConfig {lastImportedDate = day}))
+    embed $ S.writeFile fp (encode (updateConfig originalConfig bankAccountId day))
 
 runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
 runInputOnStdin = interpret $ \case
@@ -126,6 +132,7 @@ getTransactions bankAccountId day token = runReq defaultHttpConfig $ do
       ( "bank_account" =: bankAccountId
           <> "from_date" =: day
           <> "sort" =: ("dated_on" :: Text)
+          <> "per_page" =: (100 :: Int)
           <> oAuth2Bearer token
           <> header "User-Agent" ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
       )
@@ -135,7 +142,7 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
 
-runapp Args {..} config@Config {..} = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile config . runOutputOnCsv outfile . runInputOnNetwork bankAccountId lastImportedDate (BS.pack token)
+runapp Args {..} config@Config {..} = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile config bankAccountId . runOutputOnCsv outfile . runInputOnNetwork bankAccountId (fromJust $ Map.lookup bankAccountId bankAccounts) (BS.pack token)
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
@@ -147,6 +154,7 @@ app = do
     Left e -> embed $ print e
     Right tx -> do
       log' $ "Number of transactions: " ++ show (length tx)
+      when (length tx == 100) (log' $ "WARNING: Number of transactions close to limit")
       unless (null tx) (output (latestTransaction tx))
       output (CSV.encode tx)
 
