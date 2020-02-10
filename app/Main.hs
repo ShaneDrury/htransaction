@@ -56,6 +56,9 @@ newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, T
 
 newtype Message = Message String deriving (Eq, Show)
 
+log' :: (Member (Output Message) r) => String -> Sem r ()
+log' msg = output $ Message msg
+
 data Config
   = Config
       { lastImportedDate :: LastImported,
@@ -83,7 +86,7 @@ runInputOnFile fp = interpret $ \case
 runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output S.ByteString ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
   Output csv -> do
-    output $ Message $ "Writing to " ++ fp
+    log' $ "Writing to " ++ fp
     embed $ S.writeFile fp csv
 
 runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output S.ByteString ': r) a -> Sem r a
@@ -97,7 +100,7 @@ runOutputLastImportedOnStdout = interpret $ \case
 runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Config -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile fp originalConfig = interpret $ \case
   Output day -> do
-    output $ Message $ "Writing last imported day of " ++ show day ++ " to " ++ fp
+    log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
     embed $ S.writeFile fp (encode (originalConfig {lastImportedDate = day}))
 
 runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
@@ -106,12 +109,14 @@ runInputOnStdin = interpret $ \case
     json <- embed BS.getContents
     return $ bank_transactions <$> eitherDecodeStrict json
 
-runInputOnNetwork :: (Members '[Embed IO] r) => Int -> LastImported -> BS.ByteString -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
-runInputOnNetwork bankAccountId fromDate token = interpret $ \case
-  Input -> (fmap Right) <$> embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
+runInputOnNetwork :: (Members '[Embed IO, Output Message] r) => Int -> LastImported -> BS.ByteString -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
+runInputOnNetwork bankAccountId (LastImported fromDate) token = interpret $ \case
+  Input -> do
+    log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
+    (fmap Right) <$> embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
 
-getTransactions :: Int -> LastImported -> BS.ByteString -> IO TransactionsEndpoint
-getTransactions bankAccountId (LastImported day) token = runReq defaultHttpConfig $ do
+getTransactions :: Int -> Day -> BS.ByteString -> IO TransactionsEndpoint
+getTransactions bankAccountId day token = runReq defaultHttpConfig $ do
   r <-
     req
       GET
@@ -141,7 +146,7 @@ app = do
   case transactions of
     Left e -> embed $ print e
     Right tx -> do
-      output $ Message $ "Number of transactions: " ++ show (length tx)
+      log' $ "Number of transactions: " ++ show (length tx)
       unless (null tx) (output (latestTransaction tx))
       output (CSV.encode tx)
 
