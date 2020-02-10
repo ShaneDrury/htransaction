@@ -49,11 +49,11 @@ data Args
       }
   deriving (Eq, Generic, Show)
 
-data LastImported = LastImported Day deriving (Eq, Show)
+newtype LastImported = LastImported Day deriving (Eq, Show)
 
-data Message = Message String deriving (Eq, Show)
+newtype Message = Message String deriving (Eq, Show)
 
-data Config
+newtype Config
   = Config
       { lastImportedDate :: LastImported
       }
@@ -64,7 +64,7 @@ instance ParseRecord Args
 instance CSV.ToField Day where
   toField d = BS.pack $ showGregorian d
 
-data TransactionsEndpoint
+newtype TransactionsEndpoint
   = TransactionsEndpoint
       { bank_transactions :: [Transaction]
       }
@@ -93,7 +93,7 @@ runOutputLastImportedOnStdout = interpret $ \case
 runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile fp = interpret $ \case
   Output (LastImported day) -> do
-    output $ Message $ "Writing last imported day of " ++ (show day) ++ " to " ++ fp
+    output $ Message $ "Writing last imported day of " ++ show day ++ " to " ++ fp
     embed $ writeFile fp (show day)
 
 runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
@@ -106,7 +106,7 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
 
-runapp Args {..} sem = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile . runOutputOnCsv outfile . runInputOnStdin $ sem
+runapp Args {..} = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile . runOutputOnCsv outfile . runInputOnStdin
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
@@ -118,7 +118,7 @@ app = do
     Left e -> embed $ print e
     Right tx -> do
       output $ Message $ "Number of transactions: " ++ show (length tx)
-      when (length tx >= 1) (output (latestTransaction tx))
+      unless (null tx) (output (latestTransaction tx))
       output (CSV.encode tx)
 
 main :: IO ()
