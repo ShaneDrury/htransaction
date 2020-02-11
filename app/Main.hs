@@ -22,6 +22,8 @@ import qualified Data.ByteString.Lazy.Char8 as S
 import qualified Data.Csv as CSV
 import Data.Either
 import Data.List
+import qualified Data.Map as Map
+import Data.Maybe
 import Data.Ord
 import Data.Semigroup ((<>))
 import Data.Time
@@ -34,8 +36,6 @@ import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
 import System.FilePath
-import qualified Data.Map as Map
-import Data.Maybe
 
 data Transaction
   = Transaction
@@ -63,8 +63,7 @@ log' msg = output $ Message msg
 
 data Config
   = Config
-      {
-        bankAccounts :: Map.Map Int LastImported,
+      { bankAccounts :: Map.Map Int LastImported,
         token :: String
       }
   deriving (Eq, Generic, Show, FromJSON, ToJSON)
@@ -142,7 +141,12 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
 
-runapp Args {..} config@Config {..} = runM . runOutputOnLog verbose . runOutputLastImportedOnFile configFile config bankAccountId . runOutputOnCsv outfile . runInputOnNetwork bankAccountId (fromJust $ Map.lookup bankAccountId bankAccounts) (BS.pack token)
+runapp Args {..} config@Config {..} =
+  runM
+    . runOutputOnLog verbose
+    . runOutputLastImportedOnFile configFile config bankAccountId
+    . runOutputOnCsv outfile
+    . runInputOnNetwork bankAccountId (fromJust $ Map.lookup bankAccountId bankAccounts) (BS.pack token)
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
