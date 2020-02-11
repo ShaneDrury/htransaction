@@ -149,12 +149,12 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
 
-runapp Args {..} config@Config {..} =
+runapp Args {..} config@Config {..} day =
   runM
     . runOutputOnLog verbose
     . runOutputLastImportedOnFile configFile config bankAccountId
     . runOutputOnCsv outfile
-    . runInputOnNetwork bankAccountId (fromJust $ Map.lookup bankAccountId _bankAccounts) (BS.pack _token)
+    . runInputOnNetwork bankAccountId day (BS.pack _token)
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
@@ -181,5 +181,5 @@ main = do
     Left e -> die e
     Right cfg -> do
       case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
-        Just _ -> runapp options cfg app
+        Just day -> runapp options cfg day app
         Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
