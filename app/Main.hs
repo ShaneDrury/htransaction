@@ -18,6 +18,7 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
+import Data.Aeson.TH
 import qualified Data.ByteString as BSS
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as S
@@ -37,6 +38,7 @@ import Polysemy
 import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
+import System.Exit
 import System.FilePath
 
 data Transaction
@@ -71,9 +73,11 @@ data Config
       { _bankAccounts :: Map.Map Int LastImported,
         _token :: String
       }
-  deriving (Eq, Generic, Show, FromJSON, ToJSON)
+  deriving (Eq, Generic, Show)
 
 $(makeLenses ''Config)
+
+$(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
 
 instance ParseRecord Args
 
@@ -174,6 +178,8 @@ main = do
   options <- getRecord "Test program"
   config <- getConfig (configFile options)
   case config of
-    Left e -> print e
+    Left e -> die e
     Right cfg -> do
-      runapp options cfg app
+      case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
+        Just _ -> runapp options cfg app
+        Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
