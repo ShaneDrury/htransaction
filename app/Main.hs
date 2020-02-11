@@ -93,11 +93,11 @@ runInputOnFile fp = interpret $ \case
     er <- embed $ eitherDecodeFileStrict fp
     return $ bank_transactions <$> er
 
-runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output S.ByteString ': r) a -> Sem r a
+runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
-  Output csv -> do
+  Output tx -> do
     log' $ "Writing to " ++ fp
-    embed $ S.writeFile fp csv
+    embed $ S.writeFile fp (CSV.encode tx)
 
 runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output S.ByteString ': r) a -> Sem r a
 runOutputOnStdout = interpret $ \case
@@ -159,7 +159,7 @@ runapp Args {..} config@Config {..} day =
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
 
-app :: (Members '[Embed IO, Input (Either String [Transaction]), Output S.ByteString, Output LastImported, Output Message] r) => Sem r ()
+app :: (Members '[Embed IO, Input (Either String [Transaction]), Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
 app = do
   transactions <- input
   case transactions of
@@ -168,7 +168,7 @@ app = do
       log' $ "Number of transactions: " ++ show (length tx)
       when (length tx == 100) (log' $ "WARNING: Number of transactions close to limit")
       unless (null tx) (output (latestTransaction tx))
-      output (CSV.encode tx)
+      output tx
 
 getConfig :: FilePath -> IO (Either String Config)
 getConfig fp = eitherDecodeFileStrict fp
