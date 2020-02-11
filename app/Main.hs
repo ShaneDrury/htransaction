@@ -36,6 +36,7 @@ import Network.HTTP.Req
 import Options.Generic
 import Polysemy
 import Polysemy.Embed
+import Polysemy.Error
 import Polysemy.Input
 import Polysemy.Output
 import System.Exit
@@ -151,6 +152,7 @@ runOutputOnLog verbose = interpret $ \case
 
 runapp Args {..} config@Config {..} day =
   runM
+    . runError
     . runOutputOnLog verbose
     . runOutputLastImportedOnFile configFile config bankAccountId
     . runOutputOnCsv outfile
@@ -159,11 +161,11 @@ runapp Args {..} config@Config {..} day =
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
 
-app :: (Members '[Embed IO, Input (Either String [Transaction]), Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
+app :: (Members '[Error String, Input (Either String [Transaction]), Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
 app = do
   transactions <- input
   case transactions of
-    Left e -> embed $ print e
+    Left e -> throw e
     Right tx -> do
       log' $ "Number of transactions: " ++ show (length tx)
       when (length tx == 100) (log' $ "WARNING: Number of transactions close to limit")
@@ -179,7 +181,11 @@ main = do
   config <- getConfig (configFile options)
   case config of
     Left e -> die e
-    Right cfg -> do
+    Right cfg ->
       case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
-        Just day -> runapp options cfg day app
+        Just day -> do
+          r <- runapp options cfg day app
+          case r of
+            Left e -> die e
+            Right _ -> return ()
         Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
