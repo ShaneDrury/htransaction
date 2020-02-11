@@ -9,10 +9,12 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Main where
 
+import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
@@ -45,6 +47,9 @@ data Transaction
       }
   deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
 
+instance CSV.ToField Day where
+  toField d = BS.pack $ showGregorian d
+
 data Args
   = Args
       { outfile :: FilePath,
@@ -63,15 +68,14 @@ log' msg = output $ Message msg
 
 data Config
   = Config
-      { bankAccounts :: Map.Map Int LastImported,
-        token :: String
+      { _bankAccounts :: Map.Map Int LastImported,
+        _token :: String
       }
   deriving (Eq, Generic, Show, FromJSON, ToJSON)
 
-instance ParseRecord Args
+$(makeLenses ''Config)
 
-instance CSV.ToField Day where
-  toField d = BS.pack $ showGregorian d
+instance ParseRecord Args
 
 newtype TransactionsEndpoint
   = TransactionsEndpoint
@@ -99,14 +103,14 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImpo
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-updateConfig :: Config -> Int -> LastImported -> Config
-updateConfig original bankAccount day = original {bankAccounts = Map.insert bankAccount day (bankAccounts original)}
+updateConfig :: Int -> LastImported -> Config -> Config
+updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
 
 runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Config -> Int -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile fp originalConfig bankAccountId = interpret $ \case
   Output day -> do
     log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
-    embed $ S.writeFile fp (encode (updateConfig originalConfig bankAccountId day))
+    embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
 
 runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
 runInputOnStdin = interpret $ \case
@@ -146,7 +150,7 @@ runapp Args {..} config@Config {..} =
     . runOutputOnLog verbose
     . runOutputLastImportedOnFile configFile config bankAccountId
     . runOutputOnCsv outfile
-    . runInputOnNetwork bankAccountId (fromJust $ Map.lookup bankAccountId bankAccounts) (BS.pack token)
+    . runInputOnNetwork bankAccountId (fromJust $ Map.lookup bankAccountId _bankAccounts) (BS.pack _token)
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
