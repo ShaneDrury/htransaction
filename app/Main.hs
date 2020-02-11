@@ -88,11 +88,11 @@ newtype TransactionsEndpoint
       }
   deriving (Eq, Generic, Show, FromJSON)
 
-runInputOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
-runInputOnFile fp = interpret $ \case
-  Input -> do
-    er <- embed $ eitherDecodeFileStrict fp
-    return $ bank_transactions <$> er
+-- runInputOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
+-- runInputOnFile fp = interpret $ \case
+--   Input -> do
+--     er <- embed $ eitherDecodeFileStrict fp
+--     return $ bank_transactions <$> er
 
 runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
@@ -100,13 +100,13 @@ runOutputOnCsv fp = interpret $ \case
     log' $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
 
-runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output S.ByteString ': r) a -> Sem r a
-runOutputOnStdout = interpret $ \case
-  Output csv -> embed $ S.putStrLn csv
+-- runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output S.ByteString ': r) a -> Sem r a
+-- runOutputOnStdout = interpret $ \case
+--   Output csv -> embed $ S.putStrLn csv
 
-runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
-runOutputLastImportedOnStdout = interpret $ \case
-  Output day -> embed $ print day
+-- runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
+-- runOutputLastImportedOnStdout = interpret $ \case
+--   Output day -> embed $ print day
 
 updateConfig :: Int -> LastImported -> Config -> Config
 updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
@@ -117,11 +117,11 @@ runOutputLastImportedOnFile fp originalConfig bankAccountId = interpret $ \case
     log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
     embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
 
-runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
-runInputOnStdin = interpret $ \case
-  Input -> do
-    json <- embed BS.getContents
-    return $ bank_transactions <$> eitherDecodeStrict json
+-- runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
+-- runInputOnStdin = interpret $ \case
+--   Input -> do
+--     json <- embed BS.getContents
+--     return $ bank_transactions <$> eitherDecodeStrict json
 
 runInputOnNetwork :: (Members '[Embed IO, Output Message] r) => Int -> LastImported -> BS.ByteString -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
 runInputOnNetwork bankAccountId (LastImported fromDate) token = interpret $ \case
@@ -149,6 +149,8 @@ getTransactions bankAccountId day token = runReq defaultHttpConfig $ do
 runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a -> Sem r a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
+
+-- TODO: Maybe let effects use reader for config/args
 
 runapp Args {..} config@Config {..} day =
   runM
