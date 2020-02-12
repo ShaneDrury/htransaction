@@ -36,7 +36,6 @@ import Network.HTTP.Req
 import Options.Generic
 import Polysemy
 import Polysemy.Embed
-import Polysemy.Error
 import Polysemy.Input
 import Polysemy.Output
 import System.Exit
@@ -123,11 +122,11 @@ runOutputLastImportedOnFile fp originalConfig bankAccountId = interpret $ \case
 --     json <- embed BS.getContents
 --     return $ bank_transactions <$> eitherDecodeStrict json
 
-runInputOnNetwork :: (Members '[Embed IO, Output Message] r) => Int -> LastImported -> BS.ByteString -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
+runInputOnNetwork :: (Members '[Embed IO, Output Message] r) => Int -> LastImported -> BS.ByteString -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId (LastImported fromDate) token = interpret $ \case
   Input -> do
     log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
-    (fmap Right) <$> embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
+    embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
 
 getTransactions :: Int -> Day -> BS.ByteString -> IO TransactionsEndpoint
 getTransactions bankAccountId day token = runReq defaultHttpConfig $ do
@@ -154,7 +153,6 @@ runOutputOnLog verbose = interpret $ \case
 
 runapp Args {..} config@Config {..} day =
   runM
-    . runError
     . runOutputOnLog verbose
     . runOutputLastImportedOnFile configFile config bankAccountId
     . runOutputOnCsv outfile
@@ -163,16 +161,13 @@ runapp Args {..} config@Config {..} day =
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
 
-app :: (Members '[Error String, Input (Either String [Transaction]), Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
+app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
 app = do
-  transactions <- input
-  case transactions of
-    Left e -> throw e
-    Right tx -> do
-      log' $ "Number of transactions: " ++ show (length tx)
-      when (length tx == 100) (log' $ "WARNING: Number of transactions close to limit")
-      unless (null tx) (output (latestTransaction tx))
-      output tx
+  tx <- input
+  log' $ "Number of transactions: " ++ show (length tx)
+  when (length tx == 100) (log' $ "WARNING: Number of transactions close to limit")
+  unless (null tx) (output (latestTransaction tx))
+  output tx
 
 getConfig :: FilePath -> IO (Either String Config)
 getConfig fp = eitherDecodeFileStrict fp
@@ -186,8 +181,5 @@ main = do
     Right cfg ->
       case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
         Just day -> do
-          r <- runapp options cfg day app
-          case r of
-            Left e -> die e
-            Right _ -> return ()
+          runapp options cfg day app
         Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
