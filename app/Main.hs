@@ -10,6 +10,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Main where
@@ -71,13 +72,13 @@ log' msg = output $ Message msg
 data Config
   = Config
       { _bankAccounts :: Map.Map Int LastImported,
-        _token :: String,
-        _refreshToken :: String,
+        _token :: Maybe String,
+        _refreshToken :: Maybe String,
         _authorizationEndpoint :: String,
         _tokenEndpoint :: String,
         _clientID :: String,
         _clientSecret :: String,
-        _tokenCreatedAt :: UTCTime
+        _tokenCreatedAt :: Maybe UTCTime
       }
   deriving (Eq, Generic, Show)
 
@@ -116,9 +117,10 @@ runOutputOnCsv fp = interpret $ \case
 updateConfig :: Int -> LastImported -> Config -> Config
 updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
 
-runOutputLastImportedOnFile :: (Members '[Embed IO, Output Message] r) => FilePath -> Config -> Int -> Sem (Output LastImported ': r) a -> Sem r a
-runOutputLastImportedOnFile fp originalConfig bankAccountId = interpret $ \case
+runOutputLastImportedOnFile :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
   Output day -> do
+    originalConfig <- input
     log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
     embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
 
@@ -128,14 +130,47 @@ runOutputLastImportedOnFile fp originalConfig bankAccountId = interpret $ \case
 --     json <- embed BS.getContents
 --     return $ bank_transactions <$> eitherDecodeStrict json
 
-runInputOnNetwork :: (Members '[Embed IO, Output Message] r) => Int -> LastImported -> BS.ByteString -> Sem (Input [Transaction] ': r) a -> Sem r a
-runInputOnNetwork bankAccountId (LastImported fromDate) token = interpret $ \case
+withNewTokens :: TokenEndpoint -> Config -> IO Config
+withNewTokens TokenEndpoint {..} original = do
+  currentTime <- getCurrentTime
+  return $
+    original
+      { _token = Just access_token,
+        _refreshToken = Just refresh_token,
+        _tokenCreatedAt = Just currentTime
+      }
+
+runSaveTokens :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Sem (Output TokenEndpoint ': r) a -> Sem r a
+runSaveTokens fp = interpret $ \case
+  Output tokens -> do
+    originalConfig <- input
+    newConfig <- embed $ withNewTokens tokens originalConfig
+    embed $ S.writeFile fp (encode newConfig)
+
+newtype ValidToken = ValidToken BS.ByteString
+
+runValidToken :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runValidToken = interpret $ \case
   Input -> do
+    config <- input
+    case config ^. token of
+      Just t -> return $ ValidToken $ BS.pack $ t
+      Nothing -> do
+        embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
+        authorizationCode <- embed $ getLine
+        tokens <- getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
+        output tokens
+        return $ ValidToken $ BS.pack $ access_token tokens
+
+runInputOnNetwork :: (Members '[Embed IO, Output Message, Input ValidToken] r) => Int -> LastImported -> Sem (Input [Transaction] ': r) a -> Sem r a
+runInputOnNetwork bankAccountId (LastImported fromDate) = interpret $ \case
+  Input -> do
+    token <- input @ValidToken
     log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
     embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
 
-getTransactions :: Int -> Day -> BS.ByteString -> IO TransactionsEndpoint
-getTransactions bankAccountId day token = runReq defaultHttpConfig $ do
+getTransactions :: Int -> Day -> ValidToken -> IO TransactionsEndpoint
+getTransactions bankAccountId day (ValidToken token) = runReq defaultHttpConfig $ do
   r <-
     req
       GET
@@ -155,14 +190,23 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
 
--- TODO: Maybe let effects use reader for config/args
+runGetConfig :: (Members '[Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
+runGetConfig fp = interpret $ \case
+  Input -> do
+    ecfg <- embed $ getConfig fp
+    case ecfg of
+      Left e -> embed $ die e
+      Right cfg -> return cfg
 
-runapp Args {..} config@Config {..} day =
+runapp Args {..} Config {..} day =
   runM
+    . runGetConfig configFile
     . runOutputOnLog verbose
-    . runOutputLastImportedOnFile configFile config bankAccountId
+    . runOutputLastImportedOnFile configFile bankAccountId
     . runOutputOnCsv outfile
-    . runInputOnNetwork bankAccountId day (BS.pack _token)
+    . runSaveTokens configFile
+    . runValidToken
+    . runInputOnNetwork bankAccountId day
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
@@ -208,21 +252,6 @@ getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfi
       )
   return (responseBody r :: TokenEndpoint)
 
---   = Config
-      -- { _bankAccounts :: Map.Map Int LastImported,
-      --   _token :: String,
-      --   _authorizationEndpoint :: String,
-      --   _tokenEndpoint :: String,
-      --   _clientID :: String,
-      --   _clientSecret :: String,
-      --   _tokenCreatedAt :: UTCTime
-      -- }
-
-
-
-updateTokenDetails :: FilePath -> TokenEndpoint -> Config -> Config
-updateTokenDetails fp TokenEndpoint{..} config = config{_token=access_token, _refreshToken=refresh_token}
-
 main :: IO ()
 main = do
   options <- getRecord "Test program"
@@ -231,12 +260,7 @@ main = do
     Left e -> die e
     Right cfg ->
       case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
-        Just day -> do
-          putStrLn $ "Open and copy code: " <> authorizationUrl (cfg ^. clientID)
-          authorizationCode <- getLine
-          at <- getAccessToken (cfg ^. clientID) (cfg ^. clientSecret) authorizationCode
-          print at
-          runapp options cfg day app
+        Just day -> runapp options cfg day app
         Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
 
 -- TokenEndpoint {access_token = "1ydJ_8vtUB1-gGShhrLZ1nOMIJb5s9i_v3uMvF8Ib", token_type = "bearer", expires_in = 604800, refresh_token = "1QYG4gVfcOSiyRgct-UvmrwAbNIpnQ--wfWiOmOgM"}
