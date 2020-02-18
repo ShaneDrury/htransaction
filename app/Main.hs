@@ -71,7 +71,13 @@ log' msg = output $ Message msg
 data Config
   = Config
       { _bankAccounts :: Map.Map Int LastImported,
-        _token :: String
+        _token :: String,
+        _refreshToken :: String,
+        _authorizationEndpoint :: String,
+        _tokenEndpoint :: String,
+        _clientID :: String,
+        _clientSecret :: String,
+        _tokenCreatedAt :: UTCTime
       }
   deriving (Eq, Generic, Show)
 
@@ -172,6 +178,51 @@ app = do
 getConfig :: FilePath -> IO (Either String Config)
 getConfig fp = eitherDecodeFileStrict fp
 
+authorizationUrl :: String -> String
+authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
+
+data TokenEndpoint
+  = TokenEndpoint
+      { access_token :: String,
+        token_type :: String,
+        expires_in :: Int,
+        refresh_token :: String
+      }
+  deriving (Eq, Generic, Show, FromJSON)
+
+getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfig $ do
+  r <-
+    req
+      POST
+      (https "api.freeagent.com" /: "v2" /: "token_endpoint")
+      ( ReqBodyUrlEnc $
+          "client_id" =: clientID
+            <> "client_secret" =: clientSecret
+            <> "code" =: authorizationCode
+            <> "redirect_uri" =: ("https://developers.google.com/oauthplayground" :: Text)
+            <> "scope" =: ("" :: Text)
+            <> "grant_type" =: ("authorization_code" :: Text)
+      )
+      jsonResponse
+      ( header "User-Agent" ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
+      )
+  return (responseBody r :: TokenEndpoint)
+
+--   = Config
+      -- { _bankAccounts :: Map.Map Int LastImported,
+      --   _token :: String,
+      --   _authorizationEndpoint :: String,
+      --   _tokenEndpoint :: String,
+      --   _clientID :: String,
+      --   _clientSecret :: String,
+      --   _tokenCreatedAt :: UTCTime
+      -- }
+
+
+
+updateTokenDetails :: FilePath -> TokenEndpoint -> Config -> Config
+updateTokenDetails fp TokenEndpoint{..} config = config{_token=access_token, _refreshToken=refresh_token}
+
 main :: IO ()
 main = do
   options <- getRecord "Test program"
@@ -181,5 +232,26 @@ main = do
     Right cfg ->
       case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
         Just day -> do
+          putStrLn $ "Open and copy code: " <> authorizationUrl (cfg ^. clientID)
+          authorizationCode <- getLine
+          at <- getAccessToken (cfg ^. clientID) (cfg ^. clientSecret) authorizationCode
+          print at
           runapp options cfg day app
         Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
+
+-- TokenEndpoint {access_token = "1ydJ_8vtUB1-gGShhrLZ1nOMIJb5s9i_v3uMvF8Ib", token_type = "bearer", expires_in = 604800, refresh_token = "1QYG4gVfcOSiyRgct-UvmrwAbNIpnQ--wfWiOmOgM"}
+
+-- if access token doesn't exist
+-- go through setup flow
+-- save token details
+-- continue
+
+-- if access token exists
+-- and still valid
+-- continue
+
+-- if access token exists
+-- but invalid
+-- refresh token
+-- save token details if needed
+-- continue
