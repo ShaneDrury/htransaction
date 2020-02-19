@@ -95,11 +95,9 @@ newtype TransactionsEndpoint
       }
   deriving (Eq, Generic, Show, FromJSON)
 
--- runInputOnFile :: (Members '[Embed IO] r) => FilePath -> Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
--- runInputOnFile fp = interpret $ \case
---   Input -> do
---     er <- embed $ eitherDecodeFileStrict fp
---     return $ bank_transactions <$> er
+runInputTest :: (Members '[Embed IO] r) => Sem (Input [Transaction] ': r) a -> Sem r a
+runInputTest = interpret $ \case
+  Input -> return $ []
 
 runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
@@ -107,13 +105,13 @@ runOutputOnCsv fp = interpret $ \case
     log' $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
 
--- runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output S.ByteString ': r) a -> Sem r a
--- runOutputOnStdout = interpret $ \case
---   Output csv -> embed $ S.putStrLn csv
+runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output [Transaction] ': r) a -> Sem r a
+runOutputOnStdout = interpret $ \case
+  Output tx -> embed $ S.putStrLn (CSV.encode tx)
 
--- runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
--- runOutputLastImportedOnStdout = interpret $ \case
---   Output day -> embed $ print day
+runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnStdout = interpret $ \case
+  Output day -> embed $ print day
 
 updateConfig :: Int -> LastImported -> Config -> Config
 updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
@@ -124,12 +122,6 @@ runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
     originalConfig <- input
     log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
     embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
-
--- runInputOnStdin :: (Members '[Embed IO] r) => Sem (Input (Either String [Transaction]) ': r) a -> Sem r a
--- runInputOnStdin = interpret $ \case
---   Input -> do
---     json <- embed BS.getContents
---     return $ bank_transactions <$> eitherDecodeStrict json
 
 withNewTokens :: TokenEndpoint -> Config -> IO Config
 withNewTokens TokenEndpoint {..} original = do
@@ -209,6 +201,35 @@ runapp Args {..} Config {..} day =
     . runValidToken
     . runInputOnNetwork bankAccountId day
 
+runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a
+runGetConfigTest = interpret $ \case
+  Input ->
+    return $
+      Config
+        { _bankAccounts = Map.fromList [(123, LastImported $ fromGregorian 2020 02 04), (679673, LastImported $ fromGregorian 2020 02 07)],
+          _token = Just "token",
+          _refreshToken = Just "refresh",
+          _authorizationEndpoint = "https://api.freeagent.com/v2/approve_app",
+          _tokenEndpoint = "https://api.freeagent.com/v2/token_endpoint",
+          _clientID = "clientid",
+          _clientSecret = "secret",
+          _tokenExpiresAt = Nothing
+        }
+
+runSaveTokensStdout :: (Members '[Embed IO] r) => Sem (Output TokenEndpoint ': r) a -> Sem r a
+runSaveTokensStdout = interpret $ \case
+  Output tokens -> embed $ print tokens
+
+runapptest Args {..} =
+  runM
+    . runGetConfigTest
+    . runOutputOnLog verbose
+    . runOutputLastImportedOnStdout
+    . runOutputOnStdout
+    . runSaveTokensStdout
+    . runValidToken
+    . runInputTest
+
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
 
@@ -262,20 +283,5 @@ main = do
     Right cfg ->
       case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
         Just day -> runapp options cfg day app
+        --Just day -> runapptest options app
         Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
--- TokenEndpoint {access_token = "1ydJ_8vtUB1-gGShhrLZ1nOMIJb5s9i_v3uMvF8Ib", token_type = "bearer", expires_in = 604800, refresh_token = "1QYG4gVfcOSiyRgct-UvmrwAbNIpnQ--wfWiOmOgM"}
-
--- if access token doesn't exist
--- go through setup flow
--- save token details
--- continue
-
--- if access token exists
--- and still valid
--- continue
-
--- if access token exists
--- but invalid
--- refresh token
--- save token details if needed
--- continue
