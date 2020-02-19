@@ -258,18 +258,6 @@ runSaveTokensStdout :: (Members '[Embed IO] r) => Sem (Output TokenEndpoint ': r
 runSaveTokensStdout = interpret $ \case
   Output tokens -> embed $ print tokens
 
--- runapptest Args {..} =
---   runM
---     . runGetConfigTest
---     . runOutputOnLog verbose
---     . runOutputLastImportedOnStdout
---     . runOutputOnStdout
---     . runSaveTokensStdout
---     . runUseRefreshToken
---     . runGetAccessTokens
---     . runValidToken
---     . runInputTest
-
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
 
@@ -318,15 +306,6 @@ getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfi
       )
   let body = responseBody r :: TokenEndpoint
   return $ Tagged @AccessToken body
-
--- POST /v2/token_endpoint HTTP/1.1
--- Host: api.freeagent.com
--- Content-length: 150
--- content-type: application/x-www-form-urlencoded
--- user-agent: google-oauth-playground
--- client_secret=4a6aX3Ba55YloPWONgW_Xg&grant_type=refresh_token&refresh_token=1mVTyerlkdRnNQykizDeHq9p_DXEJPEivXxXPCr8D&client_id=xUrBiQlEYKASO2kDJkkO-g
-
--- client_secret=4a6aX3Ba55YloPWONgW_Xg&grant_type=refresh_token&refresh_token=1a1in-AUba_c9d433AEGzKgiJnZQ1BgWJM-EGqBBN&client_id=xUrBiQlEYKASO2kDJkkO-g
 
 useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ do
   r <-
