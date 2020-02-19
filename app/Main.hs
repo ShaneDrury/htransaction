@@ -42,6 +42,7 @@ import Polysemy.Input
 import Polysemy.Output
 import System.Exit
 import System.FilePath
+import Data.Tagged
 
 data Transaction
   = Transaction
@@ -126,10 +127,14 @@ runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
 withNewTokens :: TokenEndpoint -> Config -> IO Config
 withNewTokens TokenEndpoint {..} original = do
   currentTime <- getCurrentTime
-  return $
-    original
+  case refresh_token of
+    Just rt -> return $ original
       { _token = Just access_token,
-        _refreshToken = Just refresh_token,
+        _refreshToken = refresh_token,
+        _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
+      }
+    Nothing -> return $ original
+      { _token = Just access_token,
         _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
       }
 
@@ -142,7 +147,7 @@ runSaveTokens fp = interpret $ \case
 
 newtype ValidToken = ValidToken BS.ByteString
 
-runGetAccessTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input TokenEndpoint ': r) a -> Sem r a
+runGetAccessTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
 runGetAccessTokens = interpret $ \case
   Input -> do
     config <- input
@@ -150,7 +155,14 @@ runGetAccessTokens = interpret $ \case
     authorizationCode <- embed $ getLine
     getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
 
-runValidToken :: (Members '[Embed IO, Input Config, Input TokenEndpoint, Output Message, Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runUseRefreshTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
+runUseRefreshTokens = interpret $ \case
+  Input -> do
+    config <- input
+    log' "Trying to refresh tokens"
+    useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
+
+runValidToken :: (Members '[Embed IO, Input Config, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), Output Message, Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
 runValidToken = interpret $ \case
   Input -> do
     config <- input
@@ -160,16 +172,20 @@ runValidToken = interpret $ \case
           Just expires -> do
             currentTime <- embed getCurrentTime
             if (expires <= currentTime)
-              then undefined
+              then refreshTokens
               else (return $ ValidToken $ BS.pack t)
           Nothing -> getSaveTokens
         return $ ValidToken $ BS.pack $ t
       Nothing -> getSaveTokens
     where
       getSaveTokens = do
-        tokens <- input @TokenEndpoint
-        output tokens
-        return $ ValidToken $ BS.pack $ access_token tokens
+        tokens <- input @(Tagged AccessToken TokenEndpoint)
+        output $ unTagged tokens
+        return $ ValidToken $ BS.pack $ access_token (unTagged tokens)
+      refreshTokens = do
+        tokens <- input @(Tagged Refresh TokenEndpoint)
+        output $ unTagged tokens
+        return $ ValidToken $ BS.pack $ access_token (unTagged tokens)
 
 runInputOnNetwork :: (Members '[Embed IO, Output Message, Input ValidToken] r) => Int -> LastImported -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId (LastImported fromDate) = interpret $ \case
@@ -214,6 +230,7 @@ runapp Args {..} Config {..} day =
     . runOutputLastImportedOnFile configFile bankAccountId
     . runOutputOnCsv outfile
     . runSaveTokens configFile
+    . runUseRefreshTokens
     . runGetAccessTokens
     . runValidToken
     . runInputOnNetwork bankAccountId day
@@ -237,16 +254,17 @@ runSaveTokensStdout :: (Members '[Embed IO] r) => Sem (Output TokenEndpoint ': r
 runSaveTokensStdout = interpret $ \case
   Output tokens -> embed $ print tokens
 
-runapptest Args {..} =
-  runM
-    . runGetConfigTest
-    . runOutputOnLog verbose
-    . runOutputLastImportedOnStdout
-    . runOutputOnStdout
-    . runSaveTokensStdout
-    . runGetAccessTokens
-    . runValidToken
-    . runInputTest
+-- runapptest Args {..} =
+--   runM
+--     . runGetConfigTest
+--     . runOutputOnLog verbose
+--     . runOutputLastImportedOnStdout
+--     . runOutputOnStdout
+--     . runSaveTokensStdout
+--     . runUseRefreshToken
+--     . runGetAccessTokens
+--     . runValidToken
+--     . runInputTest
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
@@ -265,12 +283,15 @@ getConfig fp = eitherDecodeFileStrict fp
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
 
+data Refresh = Refresh
+data AccessToken = AccessToken
+
 data TokenEndpoint
   = TokenEndpoint
       { access_token :: String,
         token_type :: String,
         expires_in :: Integer,
-        refresh_token :: String
+        refresh_token :: Maybe String
       }
   deriving (Eq, Generic, Show, FromJSON)
 
@@ -290,7 +311,34 @@ getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfi
       jsonResponse
       ( header "User-Agent" ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
       )
-  return (responseBody r :: TokenEndpoint)
+  let body = responseBody r :: TokenEndpoint
+  return $ Tagged @AccessToken body 
+
+-- POST /v2/token_endpoint HTTP/1.1
+-- Host: api.freeagent.com
+-- Content-length: 150
+-- content-type: application/x-www-form-urlencoded
+-- user-agent: google-oauth-playground
+-- client_secret=4a6aX3Ba55YloPWONgW_Xg&grant_type=refresh_token&refresh_token=1mVTyerlkdRnNQykizDeHq9p_DXEJPEivXxXPCr8D&client_id=xUrBiQlEYKASO2kDJkkO-g
+
+-- client_secret=4a6aX3Ba55YloPWONgW_Xg&grant_type=refresh_token&refresh_token=1a1in-AUba_c9d433AEGzKgiJnZQ1BgWJM-EGqBBN&client_id=xUrBiQlEYKASO2kDJkkO-g
+
+useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ do
+  r <-
+    req
+      POST
+      (https "api.freeagent.com" /: "v2" /: "token_endpoint")
+      ( ReqBodyUrlEnc $
+          "client_id" =: clientID
+            <> "client_secret" =: clientSecret
+            <> "refresh_token" =: refreshToken
+            <> "grant_type" =: ("refresh_token" :: Text)
+      )
+      jsonResponse
+      ( header "User-Agent" ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
+      )
+  let body = responseBody r :: TokenEndpoint
+  return $ Tagged @Refresh body
 
 main :: IO ()
 main = do

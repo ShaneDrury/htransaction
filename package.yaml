@@ -32,6 +32,7 @@ dependencies:
 - filepath
 - req
 - lens
+- tagged
 
 library:
   source-dirs: src
