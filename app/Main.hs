@@ -31,6 +31,7 @@ import Data.Maybe
 import Data.Ord
 import Data.Semigroup ((<>))
 import Data.Time
+import Data.Time.Clock
 import GHC.Generics
 import Lib
 import Network.HTTP.Req
@@ -78,7 +79,7 @@ data Config
         _tokenEndpoint :: String,
         _clientID :: String,
         _clientSecret :: String,
-        _tokenCreatedAt :: Maybe UTCTime
+        _tokenExpiresAt :: Maybe UTCTime
       }
   deriving (Eq, Generic, Show)
 
@@ -137,7 +138,7 @@ withNewTokens TokenEndpoint {..} original = do
     original
       { _token = Just access_token,
         _refreshToken = Just refresh_token,
-        _tokenCreatedAt = Just currentTime
+        _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
       }
 
 runSaveTokens :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Sem (Output TokenEndpoint ': r) a -> Sem r a
@@ -229,7 +230,7 @@ data TokenEndpoint
   = TokenEndpoint
       { access_token :: String,
         token_type :: String,
-        expires_in :: Int,
+        expires_in :: Integer,
         refresh_token :: String
       }
   deriving (Eq, Generic, Show, FromJSON)
@@ -262,7 +263,6 @@ main = do
       case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
         Just day -> runapp options cfg day app
         Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
-
 -- TokenEndpoint {access_token = "1ydJ_8vtUB1-gGShhrLZ1nOMIJb5s9i_v3uMvF8Ib", token_type = "bearer", expires_in = 604800, refresh_token = "1QYG4gVfcOSiyRgct-UvmrwAbNIpnQ--wfWiOmOgM"}
 
 -- if access token doesn't exist
