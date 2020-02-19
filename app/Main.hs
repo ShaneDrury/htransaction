@@ -142,16 +142,32 @@ runSaveTokens fp = interpret $ \case
 
 newtype ValidToken = ValidToken BS.ByteString
 
-runValidToken :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runGetAccessTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input TokenEndpoint ': r) a -> Sem r a
+runGetAccessTokens = interpret $ \case
+  Input -> do
+    config <- input
+    embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
+    authorizationCode <- embed $ getLine
+    getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
+
+runValidToken :: (Members '[Embed IO, Input Config, Input TokenEndpoint, Output Message, Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
 runValidToken = interpret $ \case
   Input -> do
     config <- input
     case config ^. token of
-      Just t -> return $ ValidToken $ BS.pack $ t
-      Nothing -> do
-        embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
-        authorizationCode <- embed $ getLine
-        tokens <- getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
+      Just t -> do
+        case config ^. tokenExpiresAt of
+          Just expires -> do
+            currentTime <- embed getCurrentTime
+            if (expires <= currentTime)
+              then undefined
+              else (return $ ValidToken $ BS.pack t)
+          Nothing -> getSaveTokens
+        return $ ValidToken $ BS.pack $ t
+      Nothing -> getSaveTokens
+    where
+      getSaveTokens = do
+        tokens <- input @TokenEndpoint
         output tokens
         return $ ValidToken $ BS.pack $ access_token tokens
 
@@ -198,6 +214,7 @@ runapp Args {..} Config {..} day =
     . runOutputLastImportedOnFile configFile bankAccountId
     . runOutputOnCsv outfile
     . runSaveTokens configFile
+    . runGetAccessTokens
     . runValidToken
     . runInputOnNetwork bankAccountId day
 
@@ -227,6 +244,7 @@ runapptest Args {..} =
     . runOutputLastImportedOnStdout
     . runOutputOnStdout
     . runSaveTokensStdout
+    . runGetAccessTokens
     . runValidToken
     . runInputTest
 
