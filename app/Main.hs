@@ -30,6 +30,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Ord
 import Data.Semigroup ((<>))
+import Data.Tagged
 import Data.Time
 import Data.Time.Clock
 import GHC.Generics
@@ -42,7 +43,6 @@ import Polysemy.Input
 import Polysemy.Output
 import System.Exit
 import System.FilePath
-import Data.Tagged
 
 data Transaction
   = Transaction
@@ -98,7 +98,7 @@ newtype TransactionsEndpoint
 
 runInputTest :: (Members '[Embed IO] r) => Sem (Input [Transaction] ': r) a -> Sem r a
 runInputTest = interpret $ \case
-  Input -> return $ []
+  Input -> return []
 
 runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
@@ -128,15 +128,19 @@ withNewTokens :: TokenEndpoint -> Config -> IO Config
 withNewTokens TokenEndpoint {..} original = do
   currentTime <- getCurrentTime
   case refresh_token of
-    Just rt -> return $ original
-      { _token = Just access_token,
-        _refreshToken = refresh_token,
-        _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
-      }
-    Nothing -> return $ original
-      { _token = Just access_token,
-        _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
-      }
+    Just rt ->
+      return $
+        original
+          { _token = Just access_token,
+            _refreshToken = refresh_token,
+            _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
+          }
+    Nothing ->
+      return $
+        original
+          { _token = Just access_token,
+            _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
+          }
 
 runSaveTokens :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Sem (Output TokenEndpoint ': r) a -> Sem r a
 runSaveTokens fp = interpret $ \case
@@ -152,7 +156,7 @@ runGetAccessTokens = interpret $ \case
   Input -> do
     config <- input
     embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
-    authorizationCode <- embed $ getLine
+    authorizationCode <- embed getLine
     getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
 
 runUseRefreshTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
@@ -171,11 +175,11 @@ runValidToken = interpret $ \case
         case config ^. tokenExpiresAt of
           Just expires -> do
             currentTime <- embed getCurrentTime
-            if (expires <= currentTime)
+            if expires <= currentTime
               then refreshTokens
-              else (return $ ValidToken $ BS.pack t)
+              else return $ ValidToken $ BS.pack t
           Nothing -> getSaveTokens
-        return $ ValidToken $ BS.pack $ t
+        return $ ValidToken $ BS.pack t
       Nothing -> getSaveTokens
     where
       getSaveTokens = do
@@ -207,7 +211,7 @@ getTransactions bankAccountId day (ValidToken token) = runReq defaultHttpConfig 
           <> "sort" =: ("dated_on" :: Text)
           <> "per_page" =: (100 :: Int)
           <> oAuth2Bearer token
-          <> header "User-Agent" ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
+          <> header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
       )
   return (responseBody r :: TransactionsEndpoint)
 
@@ -273,7 +277,7 @@ app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported
 app = do
   tx <- input
   log' $ "Number of transactions: " ++ show (length tx)
-  when (length tx == 100) (log' $ "WARNING: Number of transactions close to limit")
+  when (length tx == 100) (log' "WARNING: Number of transactions close to limit")
   unless (null tx) (output (latestTransaction tx))
   output tx
 
@@ -284,6 +288,7 @@ authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
 
 data Refresh = Refresh
+
 data AccessToken = AccessToken
 
 data TokenEndpoint
@@ -309,10 +314,10 @@ getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfi
             <> "grant_type" =: ("authorization_code" :: Text)
       )
       jsonResponse
-      ( header "User-Agent" ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
+      ( header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
       )
   let body = responseBody r :: TokenEndpoint
-  return $ Tagged @AccessToken body 
+  return $ Tagged @AccessToken body
 
 -- POST /v2/token_endpoint HTTP/1.1
 -- Host: api.freeagent.com
@@ -335,7 +340,7 @@ useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ 
             <> "grant_type" =: ("refresh_token" :: Text)
       )
       jsonResponse
-      ( header "User-Agent" ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
+      ( header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
       )
   let body = responseBody r :: TokenEndpoint
   return $ Tagged @Refresh body
@@ -350,4 +355,4 @@ main = do
       case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
         Just day -> runapp options cfg day app
         --Just day -> runapptest options app
-        Nothing -> die $ "No bankAccountId in config: " ++ (show $ bankAccountId options)
+        Nothing -> die $ "No bankAccountId in config: " ++ show (bankAccountId options)
