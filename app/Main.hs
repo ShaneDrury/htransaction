@@ -2,12 +2,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Main where
@@ -34,32 +32,15 @@ import Data.Time.Clock
 import GHC.Generics
 import Network.HTTP.Req
 import Polysemy
+import Polysemy.Config
 import Polysemy.Embed
 import Polysemy.Input
+import Polysemy.LastImported
 import Polysemy.Output
 import System.Exit
 import Token
 import Transaction
 import Types
-
-runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
-runOutputLastImportedOnStdout = interpret $ \case
-  Output day -> embed $ print day
-
-runOutputLastImportedOnFile :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Int -> Sem (Output LastImported ': r) a -> Sem r a
-runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
-  Output day -> do
-    originalConfig <- input
-    log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
-    embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
-
-runGetLastImported :: (Members '[Input Config] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
-runGetLastImported bankAccountId = interpret $ \case
-  Input -> do
-    cfg <- input @Config
-    case Map.lookup bankAccountId (cfg ^. bankAccounts) of
-      Just day -> return day
-      Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId
 
 app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
 app = do
