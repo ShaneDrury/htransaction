@@ -33,6 +33,7 @@ dependencies:
 - req
 - lens
 - tagged
+- text
 
 library:
   source-dirs: src

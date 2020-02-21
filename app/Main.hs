@@ -15,6 +15,7 @@
 
 module Main where
 
+import Cli
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -31,18 +32,16 @@ import Data.Maybe
 import Data.Ord
 import Data.Semigroup ((<>))
 import Data.Tagged
+import Data.Text hiding (drop, length, null)
 import Data.Time
 import Data.Time.Clock
 import GHC.Generics
-import Lib
 import Network.HTTP.Req
-import Options.Generic
 import Polysemy
 import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
 import System.Exit
-import System.FilePath
 
 data Transaction
   = Transaction
@@ -54,15 +53,6 @@ data Transaction
 
 instance CSV.ToField Day where
   toField d = BS.pack $ showGregorian d
-
-data Args
-  = Args
-      { outfile :: FilePath,
-        configFile :: FilePath,
-        verbose :: Bool,
-        bankAccountId :: Int
-      }
-  deriving (Eq, Generic, Show)
 
 newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
@@ -87,8 +77,6 @@ data Config
 $(makeLenses ''Config)
 
 $(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
-
-instance ParseRecord Args
 
 newtype TransactionsEndpoint
   = TransactionsEndpoint
@@ -236,19 +224,6 @@ runGetLastImported bankAccountId = interpret $ \case
       Just day -> return day
       Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId
 
-runapp Args {..} =
-  runM
-    . runGetConfig configFile
-    . runOutputOnLog verbose
-    . runOutputLastImportedOnFile configFile bankAccountId
-    . runOutputOnCsv outfile
-    . runSaveTokens configFile
-    . runUseRefreshTokens
-    . runGetLastImported bankAccountId
-    . runGetAccessTokens
-    . runValidToken
-    . runInputOnNetwork bankAccountId
-
 runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a
 runGetConfigTest = interpret $ \case
   Input ->
@@ -270,14 +245,6 @@ runSaveTokensStdout = interpret $ \case
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
-
-app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
-app = do
-  tx <- input
-  log' $ "Number of transactions: " ++ show (length tx)
-  when (length tx == 100) (log' "WARNING: Number of transactions close to limit")
-  unless (null tx) (output (latestTransaction tx))
-  output tx
 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
@@ -331,7 +298,28 @@ useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ 
   let body = responseBody r :: TokenEndpoint
   return $ Tagged @Refresh body
 
+app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
+app = do
+  tx <- input
+  log' $ "Number of transactions: " ++ show (length tx)
+  when (length tx == 100) (log' "WARNING: Number of transactions close to limit")
+  unless (null tx) (output (latestTransaction tx))
+  output tx
+
+runapp Args {..} =
+  runM
+    . runGetConfig configFile
+    . runOutputOnLog verbose
+    . runOutputLastImportedOnFile configFile bankAccountId
+    . runOutputOnCsv outfile
+    . runSaveTokens configFile
+    . runUseRefreshTokens
+    . runGetLastImported bankAccountId
+    . runGetAccessTokens
+    . runValidToken
+    . runInputOnNetwork bankAccountId
+
 main :: IO ()
 main = do
-  options <- getRecord "Test program"
+  options <- getArgs
   runapp options app
