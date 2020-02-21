@@ -48,6 +48,7 @@ executables:
     - -with-rtsopts=-N
     - -O2
     - -fplugin=Polysemy.Plugin
+    - -Wall
     dependencies:
     - htransaction
 

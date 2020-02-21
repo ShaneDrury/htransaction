@@ -6,6 +6,7 @@ module Main where
 import Cli
 import Config
 import Control.Monad
+import Data.Tagged
 import Polysemy
 import Polysemy.Config
 import Polysemy.Input
@@ -23,6 +24,23 @@ app = do
   unless (null tx) (output (latestTransaction tx))
   output tx
 
+runapp ::
+  Args ->
+  Sem
+    '[ Input [Transaction],
+       Input ValidToken,
+       Input (Tagged AccessToken TokenEndpoint),
+       Input LastImported,
+       Input (Tagged Refresh TokenEndpoint),
+       Output TokenEndpoint,
+       Output [Transaction],
+       Output LastImported,
+       Output Message,
+       Input Config,
+       Embed IO
+     ]
+    a ->
+  IO a
 runapp Args {..} =
   runM
     . runGetConfig configFile
