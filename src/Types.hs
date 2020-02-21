@@ -15,23 +15,6 @@ newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, T
 
 newtype Message = Message String deriving (Eq, Show)
 
-data Transaction
-  = Transaction
-      { dated_on :: Day,
-        description :: String,
-        amount :: String
-      }
-  deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
-
-instance CSV.ToField Day where
-  toField d = BS.pack $ showGregorian d
-
-newtype TransactionsEndpoint
-  = TransactionsEndpoint
-      { bank_transactions :: [Transaction]
-      }
-  deriving (Eq, Generic, Show, FromJSON)
-
 newtype ValidToken = ValidToken BS.ByteString
 
 data Refresh = Refresh

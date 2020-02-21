@@ -27,7 +27,6 @@ import Data.Either
 import Data.List
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Ord
 import Data.Semigroup ((<>))
 import Data.Tagged
 import Data.Text hiding (drop, length, null)
@@ -40,6 +39,7 @@ import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
 import System.Exit
+import Transaction
 import Types
 
 log' :: (Member (Output Message) r) => String -> Sem r ()
@@ -146,23 +146,6 @@ runInputOnNetwork bankAccountId = interpret $ \case
     log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
     embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
 
-getTransactions :: Int -> Day -> ValidToken -> IO TransactionsEndpoint
-getTransactions bankAccountId day (ValidToken token) = runReq defaultHttpConfig $ do
-  r <-
-    req
-      GET
-      (https "api.freeagent.com" /: "v2" /: "bank_transactions")
-      NoReqBody
-      jsonResponse
-      ( "bank_account" =: bankAccountId
-          <> "from_date" =: day
-          <> "sort" =: ("dated_on" :: Text)
-          <> "per_page" =: (100 :: Int)
-          <> oAuth2Bearer token
-          <> header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
-      )
-  return (responseBody r :: TransactionsEndpoint)
-
 runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a -> Sem r a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
@@ -201,9 +184,6 @@ runGetConfigTest = interpret $ \case
 runSaveTokensStdout :: (Members '[Embed IO] r) => Sem (Output TokenEndpoint ': r) a -> Sem r a
 runSaveTokensStdout = interpret $ \case
   Output tokens -> embed $ print tokens
-
-latestTransaction :: [Transaction] -> LastImported
-latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
