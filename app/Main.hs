@@ -1,7 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
@@ -46,12 +44,6 @@ import Types
 
 log' :: (Member (Output Message) r) => String -> Sem r ()
 log' msg = output $ Message msg
-
-newtype TransactionsEndpoint
-  = TransactionsEndpoint
-      { bank_transactions :: [Transaction]
-      }
-  deriving (Eq, Generic, Show, FromJSON)
 
 runInputTest :: (Members '[Embed IO] r) => Sem (Input [Transaction] ': r) a -> Sem r a
 runInputTest = interpret $ \case
@@ -105,8 +97,6 @@ runSaveTokens fp = interpret $ \case
     originalConfig <- input
     newConfig <- embed $ withNewTokens tokens originalConfig
     embed $ S.writeFile fp (encode newConfig)
-
-newtype ValidToken = ValidToken BS.ByteString
 
 runGetAccessTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
 runGetAccessTokens = interpret $ \case
@@ -217,19 +207,6 @@ latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) 
 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
-
-data Refresh = Refresh
-
-data AccessToken = AccessToken
-
-data TokenEndpoint
-  = TokenEndpoint
-      { access_token :: String,
-        token_type :: String,
-        expires_in :: Integer,
-        refresh_token :: Maybe String
-      }
-  deriving (Eq, Generic, Show, FromJSON)
 
 getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfig $ do
   r <-
