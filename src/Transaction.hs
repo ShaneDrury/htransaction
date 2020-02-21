@@ -76,19 +76,11 @@ getTransactions bankAccountId day (ValidToken token) = runReq defaultHttpConfig 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ toDay . dated_on $ maximumBy (comparing (toDay . dated_on)) tx
 
-runInputTest :: Sem (Input [Transaction] ': r) a -> Sem r a
-runInputTest = interpret $ \case
-  Input -> return []
-
 runOutputOnCsv :: (Members '[Embed IO, Trace] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
   Output tx -> do
     trace $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
-
-runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output [Transaction] ': r) a -> Sem r a
-runOutputOnStdout = interpret $ \case
-  Output tx -> embed $ S.putStrLn (CSV.encode tx)
 
 runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId = interpret $ \case
