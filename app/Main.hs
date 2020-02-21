@@ -26,7 +26,6 @@ import qualified Data.Csv as CSV
 import Data.Either
 import Data.List
 import qualified Data.Map as Map
-import Data.Maybe
 import Data.Semigroup ((<>))
 import Data.Tagged
 import Data.Text hiding (drop, length, null)
@@ -42,9 +41,6 @@ import System.Exit
 import Token
 import Transaction
 import Types
-
-log' :: (Member (Output Message) r) => String -> Sem r ()
-log' msg = output $ Message msg
 
 runInputTest :: (Members '[Embed IO] r) => Sem (Input [Transaction] ': r) a -> Sem r a
 runInputTest = interpret $ \case
@@ -70,53 +66,6 @@ runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
     originalConfig <- input
     log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
     embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
-
-runSaveTokens :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Sem (Output TokenEndpoint ': r) a -> Sem r a
-runSaveTokens fp = interpret $ \case
-  Output tokens -> do
-    originalConfig <- input
-    newConfig <- embed $ withNewTokens tokens originalConfig
-    embed $ S.writeFile fp (encode newConfig)
-
-runGetAccessTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
-runGetAccessTokens = interpret $ \case
-  Input -> do
-    config <- input
-    embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
-    authorizationCode <- embed getLine
-    getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
-
-runUseRefreshTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
-runUseRefreshTokens = interpret $ \case
-  Input -> do
-    config <- input
-    log' "Trying to refresh tokens"
-    useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
-
-runValidToken :: (Members '[Embed IO, Input Config, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), Output Message, Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
-runValidToken = interpret $ \case
-  Input -> do
-    config <- input
-    case config ^. token of
-      Just t -> do
-        case config ^. tokenExpiresAt of
-          Just expires -> do
-            currentTime <- embed getCurrentTime
-            if expires <= currentTime
-              then refreshTokens
-              else return $ ValidToken $ BS.pack t
-          Nothing -> getSaveTokens
-        return $ ValidToken $ BS.pack t
-      Nothing -> getSaveTokens
-    where
-      getSaveTokens = do
-        tokens <- input @(Tagged AccessToken TokenEndpoint)
-        output $ unTagged tokens
-        return $ ValidToken $ BS.pack $ access_token (unTagged tokens)
-      refreshTokens = do
-        tokens <- input @(Tagged Refresh TokenEndpoint)
-        output $ unTagged tokens
-        return $ ValidToken $ BS.pack $ access_token (unTagged tokens)
 
 runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Output Message, Input ValidToken] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId = interpret $ \case
@@ -160,10 +109,6 @@ runGetConfigTest = interpret $ \case
           _clientSecret = "secret",
           _tokenExpiresAt = Nothing
         }
-
-runSaveTokensStdout :: (Members '[Embed IO] r) => Sem (Output TokenEndpoint ': r) a -> Sem r a
-runSaveTokensStdout = interpret $ \case
-  Output tokens -> embed $ print tokens
 
 app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
 app = do
