@@ -79,14 +79,6 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a
 runOutputOnLog verbose = interpret $ \case
   Output (Message msg) -> embed $ when verbose (putStrLn msg)
 
-runGetConfig :: (Members '[Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
-runGetConfig fp = interpret $ \case
-  Input -> do
-    ecfg <- embed $ eitherDecodeFileStrict fp
-    case ecfg of
-      Left e -> embed $ die e
-      Right cfg -> return cfg
-
 runGetLastImported :: (Members '[Input Config] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
 runGetLastImported bankAccountId = interpret $ \case
   Input -> do
@@ -94,21 +86,6 @@ runGetLastImported bankAccountId = interpret $ \case
     case Map.lookup bankAccountId (cfg ^. bankAccounts) of
       Just day -> return day
       Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId
-
-runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a
-runGetConfigTest = interpret $ \case
-  Input ->
-    return $
-      Config
-        { _bankAccounts = Map.fromList [(123, LastImported $ fromGregorian 2020 02 04), (679673, LastImported $ fromGregorian 2020 02 07)],
-          _token = Just "token",
-          _refreshToken = Just "refresh",
-          _authorizationEndpoint = "https://api.freeagent.com/v2/approve_app",
-          _tokenEndpoint = "https://api.freeagent.com/v2/token_endpoint",
-          _clientID = "clientid",
-          _clientSecret = "secret",
-          _tokenExpiresAt = Nothing
-        }
 
 app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
 app = do
