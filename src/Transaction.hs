@@ -7,11 +7,18 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Transaction where
+module Transaction
+  ( Transaction,
+    latestTransaction,
+    runInputOnNetwork,
+    runOutputOnCsv,
+  )
+where
 
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as S
+import Data.Coerce
 import qualified Data.Csv as CSV
 import Data.List
 import Data.Ord
@@ -25,17 +32,23 @@ import Polysemy.Output
 import Polysemy.Trace
 import Token
 import Types
+import Prelude
+
+newtype TransactionDate = TransactionDate Day deriving (Eq, Show, Generic, FromJSON)
+
+toDay :: TransactionDate -> Day
+toDay = coerce
+
+instance CSV.ToField TransactionDate where
+  toField (TransactionDate d) = BS.pack $ showGregorian d
 
 data Transaction
   = Transaction
-      { dated_on :: Day,
+      { dated_on :: TransactionDate,
         description :: String,
         amount :: String
       }
   deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
-
-instance CSV.ToField Day where
-  toField d = BS.pack $ showGregorian d
 
 newtype TransactionsEndpoint
   = TransactionsEndpoint
@@ -61,9 +74,9 @@ getTransactions bankAccountId day (ValidToken token) = runReq defaultHttpConfig 
   return (responseBody r :: TransactionsEndpoint)
 
 latestTransaction :: [Transaction] -> LastImported
-latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
+latestTransaction tx = LastImported $ toDay . dated_on $ maximumBy (comparing (toDay . dated_on)) tx
 
-runInputTest :: (Members '[Embed IO] r) => Sem (Input [Transaction] ': r) a -> Sem r a
+runInputTest :: Sem (Input [Transaction] ': r) a -> Sem r a
 runInputTest = interpret $ \case
   Input -> return []
 

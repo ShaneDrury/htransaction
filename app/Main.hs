@@ -1,7 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Main (main) where
+module Main
+  ( main,
+  )
+where
 
 import Cli
 import Control.Monad
@@ -11,10 +14,10 @@ import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
 import Polysemy.Trace
-import Prelude
 import Token
 import Transaction
 import Types
+import Prelude
 
 app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Trace] r) => Sem r ()
 app = do
