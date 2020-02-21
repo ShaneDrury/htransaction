@@ -1,12 +1,18 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Transaction where
 
 import Data.Aeson
 import Data.Aeson.TH
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as S
 import qualified Data.Csv as CSV
 import Data.List
 import Data.Ord
@@ -15,6 +21,9 @@ import Data.Time
 import Data.Time.Clock
 import GHC.Generics
 import Network.HTTP.Req
+import Polysemy
+import Polysemy.Input
+import Polysemy.Output
 import Token
 import Types
 
@@ -54,3 +63,25 @@ getTransactions bankAccountId day (ValidToken token) = runReq defaultHttpConfig 
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ dated_on $ maximumBy (comparing dated_on) tx
+
+runInputTest :: (Members '[Embed IO] r) => Sem (Input [Transaction] ': r) a -> Sem r a
+runInputTest = interpret $ \case
+  Input -> return []
+
+runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
+runOutputOnCsv fp = interpret $ \case
+  Output tx -> do
+    log' $ "Writing to " ++ fp
+    embed $ S.writeFile fp (CSV.encode tx)
+
+runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output [Transaction] ': r) a -> Sem r a
+runOutputOnStdout = interpret $ \case
+  Output tx -> embed $ S.putStrLn (CSV.encode tx)
+
+runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Output Message, Input ValidToken] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
+runInputOnNetwork bankAccountId = interpret $ \case
+  Input -> do
+    (LastImported fromDate) <- input
+    token <- input @ValidToken
+    log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
+    embed $ bank_transactions <$> getTransactions bankAccountId fromDate token

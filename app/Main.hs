@@ -42,20 +42,6 @@ import Token
 import Transaction
 import Types
 
-runInputTest :: (Members '[Embed IO] r) => Sem (Input [Transaction] ': r) a -> Sem r a
-runInputTest = interpret $ \case
-  Input -> return []
-
-runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
-runOutputOnCsv fp = interpret $ \case
-  Output tx -> do
-    log' $ "Writing to " ++ fp
-    embed $ S.writeFile fp (CSV.encode tx)
-
-runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output [Transaction] ': r) a -> Sem r a
-runOutputOnStdout = interpret $ \case
-  Output tx -> embed $ S.putStrLn (CSV.encode tx)
-
 runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
@@ -66,14 +52,6 @@ runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
     originalConfig <- input
     log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
     embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
-
-runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Output Message, Input ValidToken] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
-runInputOnNetwork bankAccountId = interpret $ \case
-  Input -> do
-    (LastImported fromDate) <- input
-    token <- input @ValidToken
-    log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
-    embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
 
 runGetLastImported :: (Members '[Input Config] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
 runGetLastImported bankAccountId = interpret $ \case
