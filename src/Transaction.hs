@@ -10,7 +10,6 @@
 module Transaction where
 
 import Data.Aeson
-import Data.Aeson.TH
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as S
 import qualified Data.Csv as CSV
@@ -18,12 +17,12 @@ import Data.List
 import Data.Ord
 import Data.Text
 import Data.Time
-import Data.Time.Clock
 import GHC.Generics
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
+import Polysemy.Trace
 import Token
 import Types
 
@@ -68,20 +67,20 @@ runInputTest :: (Members '[Embed IO] r) => Sem (Input [Transaction] ': r) a -> S
 runInputTest = interpret $ \case
   Input -> return []
 
-runOutputOnCsv :: (Members '[Embed IO, Output Message] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
+runOutputOnCsv :: (Members '[Embed IO, Trace] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
 runOutputOnCsv fp = interpret $ \case
   Output tx -> do
-    log' $ "Writing to " ++ fp
+    trace $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
 
 runOutputOnStdout :: (Members '[Embed IO] r) => Sem (Output [Transaction] ': r) a -> Sem r a
 runOutputOnStdout = interpret $ \case
   Output tx -> embed $ S.putStrLn (CSV.encode tx)
 
-runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Output Message, Input ValidToken] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
+runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId = interpret $ \case
   Input -> do
     (LastImported fromDate) <- input
     token <- input @ValidToken
-    log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
+    trace $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
     embed $ bank_transactions <$> getTransactions bankAccountId fromDate token

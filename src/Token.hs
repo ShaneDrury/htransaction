@@ -25,6 +25,7 @@ import Polysemy
 import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
+import Polysemy.Trace
 import Types
 
 newtype ValidToken = ValidToken BS.ByteString
@@ -99,7 +100,7 @@ useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
 
-runValidToken :: (Members '[Embed IO, Input Config, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), Output Message, Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runValidToken :: (Members '[Embed IO, Input Config, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
 runValidToken = interpret $ \case
   Input -> do
     config <- input
@@ -128,21 +129,21 @@ runSaveTokensStdout :: (Members '[Embed IO] r) => Sem (Output TokenEndpoint ': r
 runSaveTokensStdout = interpret $ \case
   Output tokens -> embed $ print tokens
 
-runUseRefreshTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
+runUseRefreshTokens :: (Members '[Embed IO, Input Config, Trace, Output TokenEndpoint] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
 runUseRefreshTokens = interpret $ \case
   Input -> do
     config <- input
-    log' "Trying to refresh tokens"
+    trace "Trying to refresh tokens"
     useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
 
-runSaveTokens :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Sem (Output TokenEndpoint ': r) a -> Sem r a
+runSaveTokens :: (Members '[Embed IO, Input Config, Trace] r) => FilePath -> Sem (Output TokenEndpoint ': r) a -> Sem r a
 runSaveTokens fp = interpret $ \case
   Output tokens -> do
     originalConfig <- input
     newConfig <- embed $ withNewTokens tokens originalConfig
     embed $ S.writeFile fp (encode newConfig)
 
-runGetAccessTokens :: (Members '[Embed IO, Input Config, Output Message, Output TokenEndpoint] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
+runGetAccessTokens :: (Members '[Embed IO, Input Config, Trace, Output TokenEndpoint] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
 runGetAccessTokens = interpret $ \case
   Input -> do
     config <- input

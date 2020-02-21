@@ -15,19 +15,20 @@ import qualified Data.Map as Map
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
+import Polysemy.Trace
 import Types
 
 runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[Embed IO, Input LastImported, Input Config, Output Message] r) => FilePath -> Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile :: (Members '[Embed IO, Input LastImported, Input Config, Trace] r) => FilePath -> Int -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
   Output day -> do
     originalConfig <- input
     originalDay <- input
     when (day /= originalDay) $ do
-      log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
+      trace $ "Writing last imported day of " ++ show day ++ " to " ++ fp
       embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
 
 runGetLastImported :: (Members '[Input Config] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a

@@ -10,15 +10,16 @@ import Polysemy.Config
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
+import Polysemy.Trace
 import Token
 import Transaction
 import Types
 
-app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
+app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Trace] r) => Sem r ()
 app = do
   tx <- input
-  log' $ "Number of transactions: " ++ show (length tx)
-  when (length tx == 100) (log' "WARNING: Number of transactions close to limit")
+  trace $ "Number of transactions: " ++ show (length tx)
+  when (length tx == 100) (trace "WARNING: Number of transactions close to limit")
   unless (null tx) (output (latestTransaction tx))
   output tx
 
