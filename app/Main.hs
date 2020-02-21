@@ -75,10 +75,6 @@ runInputOnNetwork bankAccountId = interpret $ \case
     log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
     embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
 
-runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Output Message ': r) a -> Sem r a
-runOutputOnLog verbose = interpret $ \case
-  Output (Message msg) -> embed $ when verbose (putStrLn msg)
-
 runGetLastImported :: (Members '[Input Config] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
 runGetLastImported bankAccountId = interpret $ \case
   Input -> do
