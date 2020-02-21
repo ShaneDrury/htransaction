@@ -48,7 +48,15 @@ executables:
     - -with-rtsopts=-N
     - -O2
     - -fplugin=Polysemy.Plugin
-    - -Wall
+    - -Weverything
+    - -Wno-missing-exported-signatures
+    - -Wno-missing-import-lists
+    - -Wno-missed-specialisations
+    - -Wno-all-missed-specialisations
+    - -Wno-unsafe
+    - -Wno-safe
+    - -Wno-missing-local-signatures
+    - -Wno-monomorphism-restriction
     dependencies:
     - htransaction
 

@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Main where
+module Main (main) where
 
 import Cli
 import Control.Monad
@@ -11,6 +11,7 @@ import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
 import Polysemy.Trace
+import Prelude
 import Token
 import Transaction
 import Types
