@@ -191,9 +191,10 @@ runValidToken = interpret $ \case
         output $ unTagged tokens
         return $ ValidToken $ BS.pack $ access_token (unTagged tokens)
 
-runInputOnNetwork :: (Members '[Embed IO, Output Message, Input ValidToken] r) => Int -> LastImported -> Sem (Input [Transaction] ': r) a -> Sem r a
-runInputOnNetwork bankAccountId (LastImported fromDate) = interpret $ \case
+runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Output Message, Input ValidToken] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
+runInputOnNetwork bankAccountId = interpret $ \case
   Input -> do
+    (LastImported fromDate) <- input
     token <- input @ValidToken
     log' $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
     embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
@@ -222,12 +223,20 @@ runOutputOnLog verbose = interpret $ \case
 runGetConfig :: (Members '[Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
 runGetConfig fp = interpret $ \case
   Input -> do
-    ecfg <- embed $ getConfig fp
+    ecfg <- embed $ eitherDecodeFileStrict fp
     case ecfg of
       Left e -> embed $ die e
       Right cfg -> return cfg
 
-runapp Args {..} Config {..} day =
+runGetLastImported :: (Members '[Input Config] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
+runGetLastImported bankAccountId = interpret $ \case
+  Input -> do
+    cfg <- input @Config
+    case Map.lookup bankAccountId (cfg ^. bankAccounts) of
+      Just day -> return day
+      Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId
+
+runapp Args {..} =
   runM
     . runGetConfig configFile
     . runOutputOnLog verbose
@@ -235,9 +244,10 @@ runapp Args {..} Config {..} day =
     . runOutputOnCsv outfile
     . runSaveTokens configFile
     . runUseRefreshTokens
+    . runGetLastImported bankAccountId
     . runGetAccessTokens
     . runValidToken
-    . runInputOnNetwork bankAccountId day
+    . runInputOnNetwork bankAccountId
 
 runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a
 runGetConfigTest = interpret $ \case
@@ -268,9 +278,6 @@ app = do
   when (length tx == 100) (log' "WARNING: Number of transactions close to limit")
   unless (null tx) (output (latestTransaction tx))
   output tx
-
-getConfig :: FilePath -> IO (Either String Config)
-getConfig fp = eitherDecodeFileStrict fp
 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
@@ -327,11 +334,4 @@ useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ 
 main :: IO ()
 main = do
   options <- getRecord "Test program"
-  config <- getConfig (configFile options)
-  case config of
-    Left e -> die e
-    Right cfg ->
-      case Map.lookup (bankAccountId options) (cfg ^. bankAccounts) of
-        Just day -> runapp options cfg day app
-        --Just day -> runapptest options app
-        Nothing -> die $ "No bankAccountId in config: " ++ show (bankAccountId options)
+  runapp options app
