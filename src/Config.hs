@@ -28,3 +28,6 @@ data Config
 $(makeLenses ''Config)
 
 $(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
+
+updateConfig :: Int -> LastImported -> Config -> Config
+updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)

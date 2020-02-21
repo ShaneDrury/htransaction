@@ -15,6 +15,7 @@ import Data.Time
 import Data.Time.Clock
 import GHC.Generics
 import Network.HTTP.Req
+import Token
 import Types
 
 data Transaction

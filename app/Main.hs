@@ -39,6 +39,7 @@ import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
 import System.Exit
+import Token
 import Transaction
 import Types
 
@@ -63,33 +64,12 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImpo
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-updateConfig :: Int -> LastImported -> Config -> Config
-updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
-
 runOutputLastImportedOnFile :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Int -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
   Output day -> do
     originalConfig <- input
     log' $ "Writing last imported day of " ++ show day ++ " to " ++ fp
     embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
-
-withNewTokens :: TokenEndpoint -> Config -> IO Config
-withNewTokens TokenEndpoint {..} original = do
-  currentTime <- getCurrentTime
-  case refresh_token of
-    Just rt ->
-      return $
-        original
-          { _token = Just access_token,
-            _refreshToken = refresh_token,
-            _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
-          }
-    Nothing ->
-      return $
-        original
-          { _token = Just access_token,
-            _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
-          }
 
 runSaveTokens :: (Members '[Embed IO, Input Config, Output Message] r) => FilePath -> Sem (Output TokenEndpoint ': r) a -> Sem r a
 runSaveTokens fp = interpret $ \case
@@ -184,45 +164,6 @@ runGetConfigTest = interpret $ \case
 runSaveTokensStdout :: (Members '[Embed IO] r) => Sem (Output TokenEndpoint ': r) a -> Sem r a
 runSaveTokensStdout = interpret $ \case
   Output tokens -> embed $ print tokens
-
-authorizationUrl :: String -> String
-authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
-
-getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfig $ do
-  r <-
-    req
-      POST
-      (https "api.freeagent.com" /: "v2" /: "token_endpoint")
-      ( ReqBodyUrlEnc $
-          "client_id" =: clientID
-            <> "client_secret" =: clientSecret
-            <> "code" =: authorizationCode
-            <> "redirect_uri" =: ("https://developers.google.com/oauthplayground" :: Text)
-            <> "scope" =: ("" :: Text)
-            <> "grant_type" =: ("authorization_code" :: Text)
-      )
-      jsonResponse
-      ( header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
-      )
-  let body = responseBody r :: TokenEndpoint
-  return $ Tagged @AccessToken body
-
-useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ do
-  r <-
-    req
-      POST
-      (https "api.freeagent.com" /: "v2" /: "token_endpoint")
-      ( ReqBodyUrlEnc $
-          "client_id" =: clientID
-            <> "client_secret" =: clientSecret
-            <> "refresh_token" =: refreshToken
-            <> "grant_type" =: ("refresh_token" :: Text)
-      )
-      jsonResponse
-      ( header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
-      )
-  let body = responseBody r :: TokenEndpoint
-  return $ Tagged @Refresh body
 
 app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Output Message] r) => Sem r ()
 app = do
