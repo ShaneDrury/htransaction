@@ -3,10 +3,24 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: polysemy-plugin-0.2.4.0@sha256:374813a8a6d3fb0a09524b959cbce604186c7055983f9ca08948778cd7bfa485,3083
+    pantry-tree:
+      size: 1232
+      sha256: ae77b6a2c1df51a17ee2116166cc38b7ec258b6db112aa58c3935b7a02556f2e
+  original:
+    hackage: polysemy-plugin-0.2.4.0
+- completed:
+    hackage: ghc-tcplugins-extra-0.3.2@sha256:1bbfd4449c3669a31618ea0ebc5d00d980a53988daad3b6218bab5c8cdff268d,1687
+    pantry-tree:
+      size: 331
+      sha256: 4b16989344380c912e476dc232cc58264837b498e31a8bf16a17092ba6c1cfb9
+  original:
+    hackage: ghc-tcplugins-extra-0.3.2@sha256:1bbfd4449c3669a31618ea0ebc5d00d980a53988daad3b6218bab5c8cdff268d,1687
 snapshots:
 - completed:
-    size: 523541
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/23.yaml
-    sha256: f761fe419a1a44fc3ef47f5bfb1853304d13320fc72b45d2798c08d21dabc23c
-  original: lts-14.23
+    size: 488576
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/15/0.yaml
+    sha256: e4b6a87b47ec1cf63a7f1a0884a3b276fce2b0d174a10e8753c4f618e7983568
+  original: lts-15.0
