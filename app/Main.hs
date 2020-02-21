@@ -9,13 +9,13 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Main where
 
 import Cli
+import Config
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -42,6 +42,7 @@ import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
 import System.Exit
+import Types
 
 data Transaction
   = Transaction
@@ -54,29 +55,8 @@ data Transaction
 instance CSV.ToField Day where
   toField d = BS.pack $ showGregorian d
 
-newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
-
-newtype Message = Message String deriving (Eq, Show)
-
 log' :: (Member (Output Message) r) => String -> Sem r ()
 log' msg = output $ Message msg
-
-data Config
-  = Config
-      { _bankAccounts :: Map.Map Int LastImported,
-        _token :: Maybe String,
-        _refreshToken :: Maybe String,
-        _authorizationEndpoint :: String,
-        _tokenEndpoint :: String,
-        _clientID :: String,
-        _clientSecret :: String,
-        _tokenExpiresAt :: Maybe UTCTime
-      }
-  deriving (Eq, Generic, Show)
-
-$(makeLenses ''Config)
-
-$(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
 
 newtype TransactionsEndpoint
   = TransactionsEndpoint
