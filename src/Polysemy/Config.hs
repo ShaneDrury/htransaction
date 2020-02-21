@@ -6,7 +6,6 @@
 module Polysemy.Config where
 
 import Config
-import Types
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
@@ -16,6 +15,7 @@ import Data.Time.Clock
 import GHC.Generics
 import Polysemy
 import Polysemy.Input
+import Types
 
 runGetConfig :: (Members '[Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
 runGetConfig fp = interpret $ \case

@@ -1,23 +1,23 @@
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Polysemy.LastImported where
 
 import Config
-import Types
+import Control.Lens
 import Control.Monad
 import Data.Aeson
+import qualified Data.ByteString.Lazy.Char8 as S
+import qualified Data.Map as Map
 import Data.Time
 import GHC.Generics
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
-import qualified Data.Map as Map
-import qualified Data.ByteString.Lazy.Char8 as S
-import Control.Lens
+import Types
 
 runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnStdout = interpret $ \case
