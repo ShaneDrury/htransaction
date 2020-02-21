@@ -8,12 +8,9 @@ module Polysemy.LastImported where
 
 import Config
 import Control.Lens
-import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as S
 import qualified Data.Map as Map
-import Data.Time
-import GHC.Generics
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
