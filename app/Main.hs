@@ -44,17 +44,6 @@ import Polysemy.Output
 import System.Exit
 import Types
 
-data Transaction
-  = Transaction
-      { dated_on :: Day,
-        description :: String,
-        amount :: String
-      }
-  deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
-
-instance CSV.ToField Day where
-  toField d = BS.pack $ showGregorian d
-
 log' :: (Member (Output Message) r) => String -> Sem r ()
 log' msg = output $ Message msg
 
