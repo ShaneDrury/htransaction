@@ -9,7 +9,6 @@ module Polysemy.Config
   ( runGetConfig,
     runGetConfigCached,
     runGetConfigTest,
-    Cached (..),
   )
 where
 
@@ -37,23 +36,24 @@ runGetConfig fp = interpret $ \case
 
 data Cached a = Cached a | Dirty deriving (Eq, Show)
 
-runGetConfigCached :: (Members '[Embed IO, State (Cached Config), Trace] r) => FilePath -> Sem (Output Config ': Input Config : r) a -> Sem r a
+runGetConfigCached :: (Members '[Embed IO, Trace] r) => FilePath -> Sem (Output Config : Input Config : State (Cached Config) : r) a -> Sem r a
 runGetConfigCached fp =
-  interpret
-    ( \case
-        Input -> do
-          cached <- get @(Cached Config)
-          case cached of
-            Cached cfg -> return cfg
-            Dirty -> do
-              trace "Getting config from file"
-              ecfg <- embed $ eitherDecodeFileStrict fp
-              case ecfg of
-                Left e -> error e
-                Right cfg -> do
-                  put $ Cached cfg
-                  return cfg
-    )
+  evalState Dirty
+    . interpret
+      ( \case
+          Input -> do
+            cached <- get @(Cached Config)
+            case cached of
+              Cached cfg -> return cfg
+              Dirty -> do
+                trace "Getting config from file"
+                ecfg <- embed $ eitherDecodeFileStrict fp
+                case ecfg of
+                  Left e -> error e
+                  Right cfg -> do
+                    put $ Cached cfg
+                    return cfg
+      )
     . interpret
       ( \case
           Output cfg -> do

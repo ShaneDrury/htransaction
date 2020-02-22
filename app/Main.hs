@@ -13,7 +13,6 @@ import Polysemy.Config
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
-import Polysemy.State
 import Polysemy.Trace
 import Token
 import Transaction
@@ -30,7 +29,6 @@ app = do
 
 runapp Args {..} =
   runM
-    . evalState Dirty
     . runOutputOnLog verbose
     . runGetConfigCached configFile
     . runOutputOnCsv outfile
