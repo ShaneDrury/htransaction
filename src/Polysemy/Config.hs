@@ -1,21 +1,31 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Polysemy.Config where
+module Polysemy.Config
+  ( runGetConfig,
+    runGetConfigCached,
+    runGetConfigTest,
+    Cached (..),
+  )
+where
 
 import Config
-import Control.Lens
+import Control.Monad
 import Data.Aeson
-import Data.Aeson.TH
+import qualified Data.ByteString.Lazy.Char8 as S
 import qualified Data.Map as Map
 import Data.Time
-import Data.Time.Clock
-import GHC.Generics
 import Polysemy
 import Polysemy.Input
+import Polysemy.Output
+import Polysemy.State
+import Polysemy.Trace
 import Types
+import Prelude
 
 runGetConfig :: (Members '[Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
 runGetConfig fp = interpret $ \case
@@ -24,6 +34,41 @@ runGetConfig fp = interpret $ \case
     case ecfg of
       Left e -> error e
       Right cfg -> return cfg
+
+data Cached a = Cached a | Dirty deriving (Eq, Show)
+
+runGetConfigCached :: (Members '[Embed IO, State (Cached Config), Trace] r) => FilePath -> Sem (Output Config ': Input Config : r) a -> Sem r a
+runGetConfigCached fp =
+  interpret
+    ( \case
+        Input -> do
+          cached <- get @(Cached Config)
+          case cached of
+            Cached cfg -> return cfg
+            Dirty -> do
+              trace "Getting config from file"
+              ecfg <- embed $ eitherDecodeFileStrict fp
+              case ecfg of
+                Left e -> error e
+                Right cfg -> do
+                  put $ Cached cfg
+                  return cfg
+    )
+    . interpret
+      ( \case
+          Output cfg -> do
+            cCfg <- get @(Cached Config)
+            case cCfg of
+              Cached oldCfg ->
+                when (oldCfg /= cfg) $ do
+                  trace $ "Writing new config to " ++ fp
+                  embed $ S.writeFile fp (encode cfg)
+                  put $ Cached cfg
+              Dirty -> do
+                trace $ "Writing initial config to " ++ fp
+                embed $ S.writeFile fp (encode cfg)
+                put $ Cached cfg
+      )
 
 runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a
 runGetConfigTest = interpret $ \case

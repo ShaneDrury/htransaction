@@ -4,32 +4,36 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Polysemy.LastImported where
+module Polysemy.LastImported
+  ( runOutputLastImportedOnStdout,
+    runOutputLastImportedOnFile,
+    runGetLastImported,
+  )
+where
 
 import Config
 import Control.Lens
 import Control.Monad
-import Data.Aeson
-import qualified Data.ByteString.Lazy.Char8 as S
 import qualified Data.Map as Map
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.Trace
 import Types
+import Prelude
 
 runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[Embed IO, Input LastImported, Input Config, Trace] r) => FilePath -> Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile :: (Members '[Input LastImported, Input Config, Output Config, Trace] r) => FilePath -> Int -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
   Output day -> do
     originalConfig <- input
     originalDay <- input
     when (day /= originalDay) $ do
-      trace $ "Writing last imported day of " ++ show day ++ " to " ++ fp
-      embed $ S.writeFile fp (encode (updateConfig bankAccountId day originalConfig))
+      trace $ "Outputting last imported day of " ++ show day
+      output (updateConfig bankAccountId day originalConfig)
 
 runGetLastImported :: (Members '[Input Config] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
 runGetLastImported bankAccountId = interpret $ \case
