@@ -46,7 +46,7 @@ runGetConfigCached fp =
             case cached of
               Cached cfg -> return cfg
               Dirty -> do
-                trace "Getting config from file"
+                trace $ "Getting config from " ++ fp
                 ecfg <- embed $ eitherDecodeFileStrict fp
                 case ecfg of
                   Left e -> error e
