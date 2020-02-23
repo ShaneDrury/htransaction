@@ -8,7 +8,17 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Token where
+module Token
+  ( ValidToken (..),
+    tokenFromAccessToken,
+    tokenFromRefreshToken,
+    runValidToken,
+    runUseRefreshTokens,
+    runSaveTokens,
+    runGetAccessTokens,
+    runGetTime,
+  )
+where
 
 import Config
 import Control.Lens
@@ -28,9 +38,9 @@ import Prelude
 
 newtype ValidToken = ValidToken BS.ByteString
 
-data Refresh = Refresh
+data Refresh
 
-data AccessToken = AccessToken
+data AccessToken
 
 data TokenEndpoint
   = TokenEndpoint
@@ -57,14 +67,15 @@ withNewTokens TokenEndpoint {..} original currentTime =
               _tokenExpiresAt = expiresAt
             }
 
-getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfig $ do
+getAccessToken :: String -> String -> String -> IO (Tagged AccessToken TokenEndpoint)
+getAccessToken cID secret authorizationCode = runReq defaultHttpConfig $ do
   r <-
     req
       POST
       (https "api.freeagent.com" /: "v2" /: "token_endpoint")
       ( ReqBodyUrlEnc $
-          "client_id" =: clientID
-            <> "client_secret" =: clientSecret
+          "client_id" =: cID
+            <> "client_secret" =: secret
             <> "code" =: authorizationCode
             <> "redirect_uri" =: ("https://developers.google.com/oauthplayground" :: Text)
             <> "scope" =: ("" :: Text)
@@ -76,15 +87,16 @@ getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfi
   let body = responseBody r :: TokenEndpoint
   return $ Tagged @AccessToken body
 
-useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ do
+useRefreshToken :: String -> String -> String -> IO (Tagged Refresh TokenEndpoint)
+useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
   r <-
     req
       POST
       (https "api.freeagent.com" /: "v2" /: "token_endpoint")
       ( ReqBodyUrlEnc $
-          "client_id" =: clientID
-            <> "client_secret" =: clientSecret
-            <> "refresh_token" =: refreshToken
+          "client_id" =: cID
+            <> "client_secret" =: secret
+            <> "refresh_token" =: refresh
             <> "grant_type" =: ("refresh_token" :: Text)
       )
       jsonResponse
@@ -129,16 +141,12 @@ runValidToken = interpret $ \case
         return $ ValidToken $ BS.pack t
       Nothing -> unTagged <$> input @(Tagged AccessToken ValidToken)
 
-runSaveTokensStdout :: (Members '[Embed IO] r) => Sem (Output TokenEndpoint ': r) a -> Sem r a
-runSaveTokensStdout = interpret $ \case
-  Output tokens -> embed $ print tokens
-
 runUseRefreshTokens :: (Members '[Embed IO, Input Config, Trace, Output TokenEndpoint] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
 runUseRefreshTokens = interpret $ \case
   Input -> do
     config <- input
     trace "Trying to refresh tokens"
-    useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
+    embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
 
 runGetTime :: (Members '[Embed IO] r) => Sem (Input UTCTime : r) a -> Sem r a
 runGetTime = interpret $ \case
@@ -157,4 +165,4 @@ runGetAccessTokens = interpret $ \case
     config <- input
     embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
     authorizationCode <- embed getLine
-    getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
+    embed $ getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
