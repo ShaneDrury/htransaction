@@ -2,13 +2,11 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Polysemy.Config
   ( runGetConfig,
-    runGetConfigCached,
     runGetConfigTest,
     runWriteConfig,
   )
@@ -23,7 +21,6 @@ import Data.Time
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
-import Polysemy.State
 import Polysemy.Trace
 import Types
 import Prelude
@@ -42,36 +39,6 @@ runWriteConfig fp = interpret $ \case
   Output cfg -> do
     trace $ "Writing config to " ++ fp
     embed $ S.writeFile fp (encode cfg)
-
-data Cached a = Cached a | Dirty deriving (Eq, Show)
-
-runGetConfigCached :: forall v a r. (Eq v) => Members '[Input v, Output v] r => Sem (State (Cached v) : r) a -> Sem r a
-runGetConfigCached =
-  evalState Dirty
-    . intercept @(Input v)
-      ( \case
-          Input -> do
-            cached <- get @(Cached v)
-            case cached of
-              Cached cfg -> return cfg
-              Dirty -> do
-                v <- input
-                put $ Cached v
-                return v
-      )
-    . intercept @(Output v)
-      ( \case
-          Output v -> do
-            cached <- get @(Cached v)
-            case cached of
-              Cached old ->
-                when (old /= v) $ do
-                  output v
-                  put $ Cached v
-              Dirty -> do
-                output v
-                put $ Cached v
-      )
 
 runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a
 runGetConfigTest = interpret $ \case
