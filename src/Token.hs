@@ -14,7 +14,6 @@ import Config
 import Control.Lens
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as S
 import Data.Maybe
 import Data.Tagged
 import Data.Text
@@ -22,11 +21,10 @@ import Data.Time
 import GHC.Generics
 import Network.HTTP.Req
 import Polysemy
-import Polysemy.Embed
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.Trace
-import Types
+import Prelude
 
 newtype ValidToken = ValidToken BS.ByteString
 
@@ -43,23 +41,21 @@ data TokenEndpoint
       }
   deriving (Eq, Generic, Show, FromJSON)
 
-withNewTokens :: TokenEndpoint -> Config -> IO Config
-withNewTokens TokenEndpoint {..} original = do
-  currentTime <- getCurrentTime
-  case refresh_token of
-    Just rt ->
-      return $
-        original
-          { _token = Just access_token,
-            _refreshToken = refresh_token,
-            _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
-          }
-    Nothing ->
-      return $
-        original
-          { _token = Just access_token,
-            _tokenExpiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
-          }
+withNewTokens :: TokenEndpoint -> Config -> UTCTime -> Config
+withNewTokens TokenEndpoint {..} original currentTime =
+  let expiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
+   in case refresh_token of
+        Just _ ->
+          original
+            { _token = Just access_token,
+              _refreshToken = refresh_token,
+              _tokenExpiresAt = expiresAt
+            }
+        Nothing ->
+          original
+            { _token = Just access_token,
+              _tokenExpiresAt = expiresAt
+            }
 
 getAccessToken clientID clientSecret authorizationCode = runReq defaultHttpConfig $ do
   r <-
@@ -100,7 +96,7 @@ useRefreshToken clientID clientSecret refreshToken = runReq defaultHttpConfig $ 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
 
-runValidToken :: (Members '[Embed IO, Input Config, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runValidToken :: (Members '[Input Config, Input UTCTime, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
 runValidToken = interpret $ \case
   Input -> do
     config <- input
@@ -108,7 +104,7 @@ runValidToken = interpret $ \case
       Just t -> do
         case config ^. tokenExpiresAt of
           Just expires -> do
-            currentTime <- embed getCurrentTime
+            currentTime <- input
             if expires <= currentTime
               then refreshTokens
               else return $ ValidToken $ BS.pack t
@@ -136,12 +132,16 @@ runUseRefreshTokens = interpret $ \case
     trace "Trying to refresh tokens"
     useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
 
-runSaveTokens :: (Members '[Embed IO, Input Config, Trace] r) => FilePath -> Sem (Output TokenEndpoint ': r) a -> Sem r a
-runSaveTokens fp = interpret $ \case
+runGetTime :: (Members '[Embed IO] r) => Sem (Input UTCTime : r) a -> Sem r a
+runGetTime = interpret $ \case
+  Input -> embed getCurrentTime
+
+runSaveTokens :: (Members '[Input UTCTime, Input Config, Output Config, Trace] r) => Sem (Output TokenEndpoint ': r) a -> Sem r a
+runSaveTokens = interpret $ \case
   Output tokens -> do
     originalConfig <- input
-    newConfig <- embed $ withNewTokens tokens originalConfig
-    embed $ S.writeFile fp (encode newConfig)
+    currentTime <- input
+    output (withNewTokens tokens originalConfig currentTime)
 
 runGetAccessTokens :: (Members '[Embed IO, Input Config, Trace, Output TokenEndpoint] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
 runGetAccessTokens = interpret $ \case

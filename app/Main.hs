@@ -37,7 +37,8 @@ runapp Args {..} =
     . runWriteConfig configFile
     . runCached @Config
     . runOutputOnCsv outfile
-    . runSaveTokens configFile
+    . runGetTime
+    . runSaveTokens
     . runUseRefreshTokens
     . runGetLastImported bankAccountId
     . runOutputLastImportedOnFile configFile bankAccountId
