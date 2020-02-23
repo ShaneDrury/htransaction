@@ -43,6 +43,8 @@ runapp Args {..} =
     . runGetLastImported bankAccountId
     . runOutputLastImportedOnFile configFile bankAccountId
     . runGetAccessTokens
+    . tokenFromAccessToken
+    . tokenFromRefreshToken
     . runValidToken
     . runInputOnNetwork bankAccountId
 
