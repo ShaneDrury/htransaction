@@ -9,6 +9,7 @@ module Polysemy.Config
   ( runGetConfig,
     runGetConfigCached,
     runGetConfigTest,
+    runWriteConfig,
   )
 where
 
@@ -26,48 +27,49 @@ import Polysemy.Trace
 import Types
 import Prelude
 
-runGetConfig :: (Members '[Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
+runGetConfig :: (Members '[Trace, Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
 runGetConfig fp = interpret $ \case
   Input -> do
+    trace $ "Loading config from " ++ fp
     ecfg <- embed $ eitherDecodeFileStrict fp
     case ecfg of
       Left e -> error e
       Right cfg -> return cfg
 
+runWriteConfig :: (Members '[Trace, Embed IO] r) => FilePath -> Sem (Output Config ': r) a -> Sem r a
+runWriteConfig fp = interpret $ \case
+  Output cfg -> do
+    trace $ "Writing config to " ++ fp
+    embed $ S.writeFile fp (encode cfg)
+
 data Cached a = Cached a | Dirty deriving (Eq, Show)
 
-runGetConfigCached :: (Members '[Embed IO, Trace] r) => FilePath -> Sem (Output Config : Input Config : State (Cached Config) : r) a -> Sem r a
-runGetConfigCached fp =
+runGetConfigCached :: Members '[Input Config, Output Config] r => Sem (State (Cached Config) : r) a -> Sem r a
+runGetConfigCached =
   evalState Dirty
-    . interpret
+    . intercept @(Input Config)
       ( \case
           Input -> do
             cached <- get @(Cached Config)
             case cached of
               Cached cfg -> return cfg
               Dirty -> do
-                trace $ "Getting config from " ++ fp
-                ecfg <- embed $ eitherDecodeFileStrict fp
-                case ecfg of
-                  Left e -> error e
-                  Right cfg -> do
-                    put $ Cached cfg
-                    return cfg
+                v <- input
+                put $ Cached v
+                return v
       )
-    . interpret
+    . intercept @(Output Config)
       ( \case
-          Output cfg -> do
-            cCfg <- get @(Cached Config)
-            case cCfg of
-              Cached oldCfg ->
-                when (oldCfg /= cfg) $ do
-                  trace $ "Writing new config to " ++ fp
-                  embed $ S.writeFile fp (encode cfg)
-                  put $ Cached cfg
+          Output v -> do
+            cached <- get @(Cached Config)
+            case cached of
+              Cached old ->
+                when (old /= v) $ do
+                  output v
+                  put $ Cached v
               Dirty -> do
-                trace $ "Writing initial config to " ++ fp
-                embed $ S.writeFile fp (encode cfg)
-                put $ Cached cfg
+                output v
+                put $ Cached v
       )
 
 runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a

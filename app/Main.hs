@@ -30,7 +30,9 @@ app = do
 runapp Args {..} =
   runM
     . runOutputOnLog verbose
-    . runGetConfigCached configFile
+    . runGetConfig configFile
+    . runWriteConfig configFile
+    . runGetConfigCached
     . runOutputOnCsv outfile
     . runSaveTokens configFile
     . runUseRefreshTokens
