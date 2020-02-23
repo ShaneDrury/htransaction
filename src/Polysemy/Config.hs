@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Polysemy.Config
   ( runGetConfig,
@@ -44,13 +45,13 @@ runWriteConfig fp = interpret $ \case
 
 data Cached a = Cached a | Dirty deriving (Eq, Show)
 
-runGetConfigCached :: Members '[Input Config, Output Config] r => Sem (State (Cached Config) : r) a -> Sem r a
+runGetConfigCached :: forall v a r. (Eq v) => Members '[Input v, Output v] r => Sem (State (Cached v) : r) a -> Sem r a
 runGetConfigCached =
   evalState Dirty
-    . intercept @(Input Config)
+    . intercept @(Input v)
       ( \case
           Input -> do
-            cached <- get @(Cached Config)
+            cached <- get @(Cached v)
             case cached of
               Cached cfg -> return cfg
               Dirty -> do
@@ -58,10 +59,10 @@ runGetConfigCached =
                 put $ Cached v
                 return v
       )
-    . intercept @(Output Config)
+    . intercept @(Output v)
       ( \case
           Output v -> do
-            cached <- get @(Cached Config)
+            cached <- get @(Cached v)
             case cached of
               Cached old ->
                 when (old /= v) $ do
