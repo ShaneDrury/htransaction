@@ -12,9 +12,12 @@ module Transaction
     latestTransaction,
     runInputOnNetwork,
     runOutputOnCsv,
+    retryOnUnauthorized,
+    Unauthorized,
   )
 where
 
+import qualified Control.Exception as E
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as S
@@ -27,6 +30,7 @@ import Data.Time
 import GHC.Generics
 import Network.HTTP.Req
 import Polysemy
+import Polysemy.Error
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.Trace
@@ -82,10 +86,28 @@ runOutputOnCsv fp = interpret $ \case
     trace $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
 
-runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
+data Unauthorized = Unauthorized
+
+runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error Unauthorized] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId = interpret $ \case
   Input -> do
     (LastImported fromDate) <- input
     token <- input @ValidToken
     trace $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
-    embed $ bank_transactions <$> getTransactions bankAccountId fromDate token
+    result <- embed $ E.try (getTransactions bankAccountId fromDate token)
+    case result of
+      Right r -> return $ bank_transactions r
+      Left (VanillaHttpException e) -> do
+        trace $ "Got exception: " ++ show e
+        throw Unauthorized
+
+retryOnUnauthorized :: Members '[Input [Transaction], Error Unauthorized, Output InvalidToken] r => Sem r a -> Sem r a
+retryOnUnauthorized =
+  intercept @(Input [Transaction]) $ \case
+    Input ->
+      catch @Unauthorized
+        input
+        ( \e -> do
+            output InvalidToken
+            input
+        )

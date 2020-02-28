@@ -17,6 +17,8 @@ module Token
     runSaveTokens,
     runGetAccessTokens,
     runGetTime,
+    InvalidToken (..),
+    runInvalidToken,
   )
 where
 
@@ -37,6 +39,8 @@ import Polysemy.Trace
 import Prelude
 
 newtype ValidToken = ValidToken BS.ByteString
+
+data InvalidToken = InvalidToken
 
 data Refresh
 
@@ -166,3 +170,9 @@ runGetAccessTokens = interpret $ \case
     embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
     authorizationCode <- embed getLine
     embed $ getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
+
+runInvalidToken :: (Members '[Input (Tagged Refresh ValidToken)] r) => Sem (Output InvalidToken ': r) a -> Sem r a
+runInvalidToken = interpret $ \case
+  Output _ -> do
+    input @(Tagged Refresh ValidToken)
+    return ()

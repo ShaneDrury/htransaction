@@ -13,6 +13,7 @@ import Control.Monad
 import Polysemy
 import Polysemy.Cached
 import Polysemy.Config
+import Polysemy.Error
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
@@ -32,6 +33,7 @@ app = do
 
 runapp Args {..} =
   runM
+    . runError
     . runOutputOnLog verbose
     . runGetConfig configFile
     . runWriteConfig configFile
@@ -45,10 +47,15 @@ runapp Args {..} =
     . runGetAccessTokens
     . tokenFromAccessToken
     . tokenFromRefreshToken
+    . runInvalidToken
     . runValidToken
     . runInputOnNetwork bankAccountId
+    . retryOnUnauthorized
 
 main :: IO ()
 main = do
   options <- getArgs
-  runapp options app
+  result <- runapp options app
+  case result of
+    Left _ -> putStrLn "Unauthed"
+    Right _ -> return ()
