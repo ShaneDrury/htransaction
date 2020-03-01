@@ -28,7 +28,9 @@ import Data.Ord
 import Data.Text
 import Data.Time
 import GHC.Generics
+import qualified Network.HTTP.Client as H
 import Network.HTTP.Req
+import qualified Network.HTTP.Types.Status as Status
 import Polysemy
 import Polysemy.Error
 import Polysemy.Input
@@ -86,9 +88,9 @@ runOutputOnCsv fp = interpret $ \case
     trace $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
 
-data Unauthorized = Unauthorized
+data Unauthorized = Unauthorized deriving (Eq, Show)
 
-runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error Unauthorized] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
+runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error Unauthorized, Error (GeneralError HttpException)] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId = interpret $ \case
   Input -> do
     (LastImported fromDate) <- input
@@ -97,9 +99,23 @@ runInputOnNetwork bankAccountId = interpret $ \case
     result <- embed $ E.try (getTransactions bankAccountId fromDate token)
     case result of
       Right r -> return $ bank_transactions r
-      Left (VanillaHttpException e) -> do
+      Left err@(VanillaHttpException e) ->
+        case e of
+          H.HttpExceptionRequest _ content ->
+            case content of
+              H.StatusCodeException resp _ ->
+                if H.responseStatus resp == Status.unauthorized401
+                  then
+                    ( do
+                        trace "Unauthorized request"
+                        throw Unauthorized
+                    )
+                  else throw $ GeneralError err
+              _ -> throw $ GeneralError err
+          _ -> throw $ GeneralError err
+      Left e -> do
         trace $ "Got exception: " ++ show e
-        throw Unauthorized
+        throw $ GeneralError e
 
 retryOnUnauthorized :: Members '[Input [Transaction], Error Unauthorized, Output InvalidToken] r => Sem r a -> Sem r a
 retryOnUnauthorized =
@@ -107,7 +123,7 @@ retryOnUnauthorized =
     Input ->
       catch @Unauthorized
         input
-        ( \e -> do
+        ( \_ -> do
             output InvalidToken
             input
         )

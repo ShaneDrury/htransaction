@@ -6,7 +6,10 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Polysemy.Cached where
+module Polysemy.Cached
+  ( runCached,
+  )
+where
 
 import Control.Monad
 import Polysemy

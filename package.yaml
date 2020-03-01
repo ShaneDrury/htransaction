@@ -34,6 +34,8 @@ dependencies:
 - lens
 - tagged
 - text
+- http-client
+- http-types
 
 library:
   source-dirs: src

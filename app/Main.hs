@@ -22,6 +22,7 @@ import Token
 import Transaction
 import Types
 import Prelude
+import Network.HTTP.Req
 
 app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Trace] r) => Sem r ()
 app = do
@@ -33,7 +34,8 @@ app = do
 
 runapp Args {..} =
   runM
-    . runError
+    . runError @(GeneralError HttpException)
+    . runError @Unauthorized
     . runOutputOnLog verbose
     . runGetConfig configFile
     . runWriteConfig configFile
@@ -57,5 +59,5 @@ main = do
   options <- getArgs
   result <- runapp options app
   case result of
-    Left _ -> putStrLn "Unauthed"
+    Left e -> print e
     Right _ -> return ()
