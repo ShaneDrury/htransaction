@@ -10,6 +10,7 @@ where
 import Cli
 import Config
 import Control.Monad
+import Network.HTTP.Req
 import Polysemy
 import Polysemy.Cached
 import Polysemy.Config
@@ -22,7 +23,6 @@ import Token
 import Transaction
 import Types
 import Prelude
-import Network.HTTP.Req
 
 app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Trace] r) => Sem r ()
 app = do

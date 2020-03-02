@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -18,6 +19,7 @@ module Transaction
 where
 
 import qualified Control.Exception as E
+import Control.Lens
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as S
@@ -90,6 +92,15 @@ runOutputOnCsv fp = interpret $ \case
 
 data Unauthorized = Unauthorized deriving (Eq, Show)
 
+$(makePrisms ''HttpException) -- req
+
+$(makePrisms ''H.HttpException)
+
+$(makePrisms ''H.HttpExceptionContent)
+
+responseP :: Traversal' HttpException (H.Response ())
+responseP = _VanillaHttpException . _HttpExceptionRequest . _2 . _StatusCodeException . _1
+
 runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error Unauthorized, Error (GeneralError HttpException)] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId = interpret $ \case
   Input -> do
@@ -99,23 +110,19 @@ runInputOnNetwork bankAccountId = interpret $ \case
     result <- embed $ E.try (getTransactions bankAccountId fromDate token)
     case result of
       Right r -> return $ bank_transactions r
-      Left err@(VanillaHttpException e) ->
-        case e of
-          H.HttpExceptionRequest _ content ->
-            case content of
-              H.StatusCodeException resp _ ->
-                if H.responseStatus resp == Status.unauthorized401
-                  then
-                    ( do
-                        trace "Unauthorized request"
-                        throw Unauthorized
-                    )
-                  else throw $ GeneralError err
-              _ -> throw $ GeneralError err
-          _ -> throw $ GeneralError err
-      Left e -> do
-        trace $ "Got exception: " ++ show e
-        throw $ GeneralError e
+      Left err ->
+        case err ^? responseP of
+          Just resp ->
+            if H.responseStatus resp == Status.unauthorized401
+              then
+                ( do
+                    trace "Unauthed"
+                    throw Unauthorized
+                )
+              else throw $ GeneralError err
+          _ -> do
+            trace $ "Got exception: " ++ show err
+            throw $ GeneralError err
 
 retryOnUnauthorized :: Members '[Input [Transaction], Error Unauthorized, Output InvalidToken] r => Sem r a -> Sem r a
 retryOnUnauthorized =
