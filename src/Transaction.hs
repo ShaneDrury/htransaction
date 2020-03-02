@@ -101,6 +101,14 @@ $(makePrisms ''H.HttpExceptionContent)
 responseP :: Traversal' HttpException (H.Response ())
 responseP = _VanillaHttpException . _HttpExceptionRequest . _2 . _StatusCodeException . _1
 
+statusP :: HttpException -> Maybe Status.Status
+statusP e = H.responseStatus <$> e ^? responseP
+
+isUnauthorized :: HttpException -> Bool
+isUnauthorized e = case statusP e of
+  Just status -> status == Status.unauthorized401
+  Nothing -> False
+
 runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error Unauthorized, Error (GeneralError HttpException)] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
 runInputOnNetwork bankAccountId = interpret $ \case
   Input -> do
@@ -111,18 +119,17 @@ runInputOnNetwork bankAccountId = interpret $ \case
     case result of
       Right r -> return $ bank_transactions r
       Left err ->
-        case err ^? responseP of
-          Just resp ->
-            if H.responseStatus resp == Status.unauthorized401
-              then
-                ( do
-                    trace "Unauthed"
-                    throw Unauthorized
-                )
-              else throw $ GeneralError err
-          _ -> do
-            trace $ "Got exception: " ++ show err
-            throw $ GeneralError err
+        if isUnauthorized err
+          then
+            ( do
+                trace "Unauthorized"
+                throw Unauthorized
+            )
+          else
+            ( do
+                trace $ "Got exception: " ++ show err
+                throw $ GeneralError err
+            )
 
 retryOnUnauthorized :: Members '[Input [Transaction], Error Unauthorized, Output InvalidToken] r => Sem r a -> Sem r a
 retryOnUnauthorized =
