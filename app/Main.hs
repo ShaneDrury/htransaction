@@ -60,4 +60,6 @@ main = do
   result <- runapp options app
   case result of
     Left e -> print e
-    Right _ -> return ()
+    Right e -> case e of
+      Left ee -> print ee
+      Right _ -> return ()
