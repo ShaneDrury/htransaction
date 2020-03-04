@@ -135,7 +135,7 @@ runValidToken = interpret $ \case
     config <- input
     case config ^. token of
       Just t -> do
-        case config ^. tokenExpiresAt of
+        _ <- case config ^. tokenExpiresAt of
           Just expires -> do
             currentTime <- input
             if expires <= currentTime
@@ -174,5 +174,5 @@ runGetAccessTokens = interpret $ \case
 runInvalidToken :: (Members '[Input (Tagged Refresh ValidToken)] r) => Sem (Output InvalidToken ': r) a -> Sem r a
 runInvalidToken = interpret $ \case
   Output _ -> do
-    input @(Tagged Refresh ValidToken)
+    _ <- input @(Tagged Refresh ValidToken)
     return ()

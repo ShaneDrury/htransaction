@@ -5,24 +5,32 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Config where
+module Config
+  ( Config (..),
+    clientID,
+    clientSecret,
+    token,
+    tokenExpiresAt,
+    refreshToken,
+    updateConfig,
+    bankAccounts,
+  )
+where
 
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
 import qualified Data.Map as Map
 import Data.Time
-import Data.Time.Clock
 import GHC.Generics
 import Types
+import Prelude
 
 data Config
   = Config
       { _bankAccounts :: Map.Map Int LastImported,
         _token :: Maybe String,
         _refreshToken :: Maybe String,
-        _authorizationEndpoint :: String,
-        _tokenEndpoint :: String,
         _clientID :: String,
         _clientSecret :: String,
         _tokenExpiresAt :: Maybe UTCTime

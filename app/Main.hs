@@ -45,7 +45,7 @@ runapp Args {..} =
     . runSaveTokens
     . runUseRefreshTokens
     . runGetLastImported bankAccountId
-    . runOutputLastImportedOnFile configFile bankAccountId
+    . runOutputLastImportedOnFile bankAccountId
     . runGetAccessTokens
     . tokenFromAccessToken
     . tokenFromRefreshToken

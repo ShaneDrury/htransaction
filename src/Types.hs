@@ -5,7 +5,12 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Types where
+module Types
+  ( runOutputOnLog,
+    LastImported (..),
+    GeneralError (..),
+  )
+where
 
 import Control.Monad
 import Data.Aeson
@@ -13,6 +18,7 @@ import Data.Time
 import GHC.Generics
 import Polysemy
 import Polysemy.Trace
+import Prelude
 
 newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 

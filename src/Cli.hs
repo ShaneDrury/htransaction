@@ -1,10 +1,15 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Cli where
+module Cli
+  ( Args (..),
+    getArgs,
+  )
+where
 
 import GHC.Generics
 import Options.Generic
+import Prelude
 
 data Args
   = Args

@@ -26,8 +26,8 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImpo
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[Input LastImported, Input Config, Output Config, Trace] r) => FilePath -> Int -> Sem (Output LastImported ': r) a -> Sem r a
-runOutputLastImportedOnFile fp bankAccountId = interpret $ \case
+runOutputLastImportedOnFile :: (Members '[Input LastImported, Input Config, Output Config, Trace] r) => Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile bankAccountId = interpret $ \case
   Output day -> do
     originalConfig <- input
     originalDay <- input
