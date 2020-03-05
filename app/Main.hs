@@ -10,11 +10,9 @@ where
 import Cli
 import Config
 import Control.Monad
-import Network.HTTP.Req
 import Polysemy
 import Polysemy.Cached
 import Polysemy.Config
-import Polysemy.Error
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
@@ -34,8 +32,7 @@ app = do
 
 runapp Args {..} =
   runM
-    . runError @(HttpException)
-    . runError @Unauthorized
+    . handleErrors
     . runOutputOnLog verbose
     . runGetConfig configFile
     . runWriteConfig configFile
@@ -60,6 +57,4 @@ main = do
   result <- runapp options app
   case result of
     Left e -> print e
-    Right e -> case e of
-      Left ee -> print ee
-      Right _ -> return ()
+    Right () -> return ()

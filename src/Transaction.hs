@@ -90,8 +90,6 @@ runOutputOnCsv fp = interpret $ \case
     trace $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
 
-data Unauthorized = Unauthorized deriving (Eq, Show)
-
 $(makePrisms ''HttpException) -- req
 
 $(makePrisms ''H.HttpException)
@@ -109,35 +107,40 @@ isUnauthorized e = case statusP e of
   Just status -> status == Status.unauthorized401
   Nothing -> False
 
-runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error Unauthorized, Error HttpException] r) => Int -> Sem (Input [Transaction] ': r) a -> Sem r a
-runInputOnNetwork bankAccountId = interpret $ \case
-  Input -> do
-    (LastImported fromDate) <- input
-    token <- input @ValidToken
-    trace $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
-    result <- embed $ E.try (getTransactions bankAccountId fromDate token)
-    case result of
-      Right r -> return $ bank_transactions r
-      Left err ->
-        if isUnauthorized err
-          then
-            ( do
-                trace "Unauthorized"
-                throw Unauthorized
-            )
-          else
-            ( do
-                trace $ "Got exception: " ++ show err
-                throw $ err
-            )
+runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error HttpException, Error Unauthorized] r) => Int -> Sem (Input [Transaction] : r) a -> Sem r a
+runInputOnNetwork bankAccountId =
+  interpret @(Input [Transaction])
+    ( \case
+        Input -> do
+          (LastImported fromDate) <- input
+          token <- input @ValidToken
+          trace $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
+          result <- embed $ E.try (getTransactions bankAccountId fromDate token)
+          case result of
+            Right r -> return $ bank_transactions r
+            Left err ->
+              if isUnauthorized err
+                then
+                  ( do
+                      trace "Unauthorized"
+                      throw Unauthorized
+                  )
+                else
+                  ( do
+                      trace $ "Got exception: " ++ show err
+                      throw err
+                  )
+    )
 
-retryOnUnauthorized :: Members '[Input [Transaction], Error Unauthorized, Output InvalidToken] r => Sem r a -> Sem r a
+retryOnUnauthorized :: Members '[Input [Transaction], Output InvalidToken, Error Unauthorized] r => Sem r a -> Sem r a
 retryOnUnauthorized =
-  intercept @(Input [Transaction]) $ \case
-    Input ->
-      catch @Unauthorized
-        input
-        ( \_ -> do
-            output InvalidToken
+  intercept @(Input [Transaction])
+    ( \case
+        Input ->
+          catch @Unauthorized
             input
-        )
+            ( \_ -> do
+                output InvalidToken
+                input
+            )
+    )
