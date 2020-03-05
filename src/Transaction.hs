@@ -107,7 +107,7 @@ isUnauthorized e = case statusP e of
   Just status -> status == Status.unauthorized401
   Nothing -> False
 
-runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error HttpException, Error Unauthorized] r) => Int -> Sem (Input [Transaction] : r) a -> Sem r a
+runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error HttpException] r) => Int -> Sem (Input [Transaction] : r) a -> Sem r a
 runInputOnNetwork bankAccountId =
   interpret @(Input [Transaction])
     ( \case
@@ -118,29 +118,24 @@ runInputOnNetwork bankAccountId =
           result <- embed $ E.try (getTransactions bankAccountId fromDate token)
           case result of
             Right r -> return $ bank_transactions r
-            Left err ->
-              if isUnauthorized err
-                then
-                  ( do
-                      trace "Unauthorized"
-                      throw Unauthorized
-                  )
-                else
-                  ( do
-                      trace $ "Got exception: " ++ show err
-                      throw err
-                  )
+            Left err -> throw @HttpException err
     )
 
-retryOnUnauthorized :: Members '[Input [Transaction], Output InvalidToken, Error Unauthorized] r => Sem r a -> Sem r a
+retryOnUnauthorized :: Members '[Trace, Input [Transaction], Output InvalidToken, Error HttpException] r => Sem r a -> Sem r a
 retryOnUnauthorized =
   intercept @(Input [Transaction])
     ( \case
         Input ->
-          catch @Unauthorized
+          catch @HttpException
             input
-            ( \_ -> do
-                output InvalidToken
-                input
+            ( \e ->
+                if isUnauthorized e
+                  then
+                    ( do
+                        trace "Unauthorized"
+                        output InvalidToken
+                        input
+                    )
+                  else throw e
             )
     )
