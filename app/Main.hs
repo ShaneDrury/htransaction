@@ -34,7 +34,7 @@ app = do
 
 runapp Args {..} =
   runM
-    . runError @(GeneralError HttpException)
+    . runError @(HttpException)
     . runError @Unauthorized
     . runOutputOnLog verbose
     . runGetConfig configFile
