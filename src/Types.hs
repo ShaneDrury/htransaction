@@ -11,7 +11,6 @@ module Types
     LastImported (..),
     handleErrors,
     AppError (..),
-    Unauthorized (..),
   )
 where
 
@@ -31,15 +30,12 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Trace ': r) a -> Sem r
 runOutputOnLog verbose = interpret $ \case
   Trace msg -> embed $ when verbose (putStrLn msg)
 
-data Unauthorized = Unauthorized deriving (Eq, Show)
-
 data AppError
   = HttpError H.HttpException
   | UnauthorizedError
   deriving (Show)
 
-handleErrors :: Sem (Error Unauthorized : Error H.HttpException : Error AppError : r) a -> Sem r (Either AppError a)
+handleErrors :: Sem (Error H.HttpException : Error AppError : r) a -> Sem r (Either AppError a)
 handleErrors =
   runError @AppError
     . mapError HttpError
-    . mapError (const UnauthorizedError)

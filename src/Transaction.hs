@@ -14,7 +14,6 @@ module Transaction
     runInputOnNetwork,
     runOutputOnCsv,
     retryOnUnauthorized,
-    Unauthorized,
   )
 where
 
