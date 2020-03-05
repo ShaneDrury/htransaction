@@ -32,7 +32,6 @@ runOutputOnLog verbose = interpret $ \case
 
 data AppError
   = HttpError H.HttpException
-  | UnauthorizedError
   deriving (Show)
 
 handleErrors :: Sem (Error H.HttpException : Error AppError : r) a -> Sem r (Either AppError a)
