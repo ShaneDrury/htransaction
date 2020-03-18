@@ -20,6 +20,7 @@ module Transaction
     TransactionsManager,
     getTransactions,
     runTransactionsManager,
+    outputTransactions,
   )
 where
 
@@ -65,12 +66,14 @@ data Transaction
 
 data TransactionsManager m a where
   GetTransactions :: TransactionsManager m [Transaction]
+  OutputTransactions :: [Transaction] -> TransactionsManager m ()
 
 makeSem ''TransactionsManager
 
-runTransactionsManager :: (Members '[Input [Transaction]] r) => Sem (TransactionsManager : r) a -> Sem r a
+runTransactionsManager :: (Members '[Input [Transaction], Output [Transaction]] r) => Sem (TransactionsManager : r) a -> Sem r a
 runTransactionsManager = interpret $ \case
   GetTransactions -> input @[Transaction]
+  OutputTransactions tx -> output tx
 
 newtype TransactionsEndpoint
   = TransactionsEndpoint
