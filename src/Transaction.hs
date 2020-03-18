@@ -1,9 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -14,6 +17,9 @@ module Transaction
     runInputOnNetwork,
     runOutputOnCsv,
     retryOnUnauthorized,
+    TransactionsManager,
+    getTransactions,
+    runTransactionsManager,
   )
 where
 
@@ -57,14 +63,23 @@ data Transaction
       }
   deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
 
+data TransactionsManager m a where
+  GetTransactions :: TransactionsManager m [Transaction]
+
+makeSem ''TransactionsManager
+
+runTransactionsManager :: (Members '[Input [Transaction]] r) => Sem (TransactionsManager : r) a -> Sem r a
+runTransactionsManager = interpret $ \case
+  GetTransactions -> input @[Transaction]
+
 newtype TransactionsEndpoint
   = TransactionsEndpoint
       { bank_transactions :: [Transaction]
       }
   deriving (Eq, Generic, Show, FromJSON)
 
-getTransactions :: Int -> Day -> ValidToken -> IO TransactionsEndpoint
-getTransactions bankAccountId day (ValidToken token) = runReq defaultHttpConfig $ do
+getTransactionsNetwork :: Int -> Day -> ValidToken -> IO TransactionsEndpoint
+getTransactionsNetwork bankAccountId day (ValidToken token) = runReq defaultHttpConfig $ do
   r <-
     req
       GET
@@ -114,7 +129,7 @@ runInputOnNetwork bankAccountId =
           (LastImported fromDate) <- input
           token <- input @ValidToken
           trace $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
-          result <- embed $ E.try (getTransactions bankAccountId fromDate token)
+          result <- embed $ E.try (getTransactionsNetwork bankAccountId fromDate token)
           case result of
             Right r -> return $ bank_transactions r
             Left err -> throw @HttpException err

@@ -22,9 +22,9 @@ import Transaction
 import Types
 import Prelude
 
-app :: (Members '[Input [Transaction], Output [Transaction], Output LastImported, Trace] r) => Sem r ()
+app :: (Members '[TransactionsManager, Output [Transaction], Output LastImported, Trace] r) => Sem r ()
 app = do
-  tx <- input
+  tx <- getTransactions
   trace $ "Number of transactions: " ++ show (length tx)
   when (length tx == 100) (trace "WARNING: Number of transactions close to limit")
   unless (null tx) (output (latestTransaction tx))
@@ -50,6 +50,7 @@ runapp Args {..} =
     . runValidToken
     . runInputOnNetwork bankAccountId
     . retryOnUnauthorized
+    . runTransactionsManager
 
 main :: IO ()
 main = do
