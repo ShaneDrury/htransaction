@@ -5,13 +5,13 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Token
   ( ValidToken (..),
-    tokenFromAccessToken,
-    tokenFromRefreshToken,
+    tokenFromTagged,
     runValidToken,
     runUseRefreshTokens,
     runSaveTokens,
@@ -19,6 +19,8 @@ module Token
     runGetTime,
     InvalidToken (..),
     runInvalidToken,
+    Refresh,
+    AccessToken,
   )
 where
 
@@ -115,19 +117,12 @@ authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=
 toValidToken :: TokenEndpoint -> ValidToken
 toValidToken tokens = ValidToken $ BS.pack $ access_token tokens
 
-tokenFromAccessToken :: (Members '[Input (Tagged AccessToken TokenEndpoint), Output TokenEndpoint] r) => Sem (Input (Tagged AccessToken ValidToken) ': r) a -> Sem r a
-tokenFromAccessToken = interpret $ \case
+tokenFromTagged :: forall b r a. (Members '[Input (Tagged b TokenEndpoint), Output TokenEndpoint] r) => Sem (Input (Tagged b ValidToken) ': r) a -> Sem r a
+tokenFromTagged = interpret $ \case
   Input -> do
-    tokens <- unTagged <$> input @(Tagged AccessToken TokenEndpoint)
+    tokens <- unTagged <$> input @(Tagged b TokenEndpoint)
     output tokens
-    return $ Tagged @AccessToken $ toValidToken tokens
-
-tokenFromRefreshToken :: (Members '[Input (Tagged Refresh TokenEndpoint), Output TokenEndpoint] r) => Sem (Input (Tagged Refresh ValidToken) ': r) a -> Sem r a
-tokenFromRefreshToken = interpret $ \case
-  Input -> do
-    tokens <- unTagged <$> input @(Tagged Refresh TokenEndpoint)
-    output tokens
-    return $ Tagged @Refresh $ toValidToken tokens
+    return $ Tagged @b $ toValidToken tokens
 
 runValidToken :: (Members '[Input Config, Input UTCTime, Input (Tagged AccessToken ValidToken), Input (Tagged Refresh ValidToken), Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
 runValidToken = interpret $ \case

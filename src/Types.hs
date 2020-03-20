@@ -30,7 +30,7 @@ runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Trace ': r) a -> Sem r
 runOutputOnLog verbose = interpret $ \case
   Trace msg -> embed $ when verbose (putStrLn msg)
 
-data AppError
+newtype AppError
   = HttpError H.HttpException
   deriving (Show)
 
