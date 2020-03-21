@@ -18,7 +18,6 @@ module Token
     runGetAccessTokens,
     runGetTime,
     InvalidToken (..),
-    runInvalidToken,
     Refresh,
     AccessToken,
   )
@@ -165,9 +164,3 @@ runGetAccessTokens = interpret $ \case
     embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
     authorizationCode <- embed getLine
     embed $ getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
-
-runInvalidToken :: (Members '[Input (Tagged Refresh ValidToken)] r) => Sem (Output InvalidToken ': r) a -> Sem r a
-runInvalidToken = interpret $ \case
-  Output _ -> do
-    _ <- input @(Tagged Refresh ValidToken)
-    return ()

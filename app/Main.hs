@@ -45,7 +45,6 @@ runapp Args {..} =
     . runGetAccessTokens
     . tokenFromTagged @AccessToken
     . tokenFromTagged @Refresh
-    . runInvalidToken
     . runValidToken
     . runInputOnNetwork bankAccountId
     . retryOnUnauthorized

@@ -33,6 +33,7 @@ import Data.Coerce
 import qualified Data.Csv as CSV
 import Data.List
 import Data.Ord
+import Data.Tagged
 import Data.Text
 import Data.Time
 import GHC.Generics
@@ -138,7 +139,7 @@ runInputOnNetwork bankAccountId =
             Left err -> throw @HttpException err
     )
 
-retryOnUnauthorized :: Members '[Trace, Input [Transaction], Output InvalidToken, Error HttpException] r => Sem r a -> Sem r a
+retryOnUnauthorized :: Members '[Trace, Input [Transaction], Input (Tagged Refresh ValidToken), Error HttpException] r => Sem r a -> Sem r a
 retryOnUnauthorized =
   intercept @(Input [Transaction])
     ( \case
@@ -150,8 +151,8 @@ retryOnUnauthorized =
                   then
                     ( do
                         trace "Unauthorized"
-                        output InvalidToken
-                        input
+                        input @(Tagged Refresh ValidToken)
+                        input @[Transaction]
                     )
                   else throw e
             )
