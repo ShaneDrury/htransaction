@@ -1,9 +1,11 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -72,8 +74,8 @@ withNewTokens TokenEndpoint {..} original currentTime =
               _tokenExpiresAt = expiresAt
             }
 
-getAccessToken :: String -> String -> String -> IO (Tagged AccessToken TokenEndpoint)
-getAccessToken cID secret authorizationCode = runReq defaultHttpConfig $ do
+getAccessTokenNetwork :: String -> String -> String -> IO (Tagged AccessToken TokenEndpoint)
+getAccessTokenNetwork cID secret authorizationCode = runReq defaultHttpConfig $ do
   r <-
     req
       POST
@@ -116,14 +118,13 @@ authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=
 toValidToken :: TokenEndpoint -> ValidToken
 toValidToken tokens = ValidToken $ BS.pack $ access_token tokens
 
-tokenFromTagged :: forall b r a. (Members '[Input (Tagged b TokenEndpoint), Output TokenEndpoint] r) => Sem (Input (Tagged b ValidToken) ': r) a -> Sem r a
+tokenFromTagged :: forall b r a. (Members '[Input (Tagged b TokenEndpoint)] r) => Sem (Input (Tagged b ValidToken) ': r) a -> Sem r a
 tokenFromTagged = interpret $ \case
   Input -> do
     tokens <- unTagged <$> input @(Tagged b TokenEndpoint)
-    output tokens
     return $ Tagged @b $ toValidToken tokens
 
-runValidToken :: (Members '[Input Config, Input UTCTime, Input (Tagged AccessToken ValidToken), Input (Tagged Refresh ValidToken), Output TokenEndpoint] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runValidToken :: (Members '[Input Config, Input UTCTime, Input (Tagged AccessToken ValidToken), Input (Tagged Refresh ValidToken)] r) => Sem (Input ValidToken ': r) a -> Sem r a
 runValidToken = interpret $ \case
   Input -> do
     config <- input
@@ -139,7 +140,7 @@ runValidToken = interpret $ \case
         return $ ValidToken $ BS.pack t
       Nothing -> unTagged <$> input @(Tagged AccessToken ValidToken)
 
-runUseRefreshTokens :: (Members '[Embed IO, Input Config, Trace, Output TokenEndpoint] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
+runUseRefreshTokens :: (Members '[Embed IO, Input Config, Trace] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
 runUseRefreshTokens = interpret $ \case
   Input -> do
     config <- input
@@ -150,17 +151,20 @@ runGetTime :: (Members '[Embed IO] r) => Sem (Input UTCTime : r) a -> Sem r a
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
-runSaveTokens :: (Members '[Input UTCTime, Input Config, Output Config, Trace] r) => Sem (Output TokenEndpoint ': r) a -> Sem r a
-runSaveTokens = interpret $ \case
-  Output tokens -> do
+runSaveTokens :: forall b r a. (Members '[Input UTCTime, Input Config, Output Config, Trace] r) => Sem (Input (Tagged b TokenEndpoint) : r) a -> Sem (Input (Tagged b TokenEndpoint) : r) a
+runSaveTokens = intercept @(Input (Tagged b TokenEndpoint)) $ \case
+  Input -> do
+    taggedTokens <- input @(Tagged b TokenEndpoint)
+    let tokens = unTagged taggedTokens
     originalConfig <- input
     currentTime <- input
     output (withNewTokens tokens originalConfig currentTime)
+    return taggedTokens
 
-runGetAccessTokens :: (Members '[Embed IO, Input Config, Trace, Output TokenEndpoint] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
+runGetAccessTokens :: (Members '[Embed IO, Input Config, Trace] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
 runGetAccessTokens = interpret $ \case
   Input -> do
     config <- input
     embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
     authorizationCode <- embed getLine
-    embed $ getAccessToken (config ^. clientID) (config ^. clientSecret) authorizationCode
+    embed $ getAccessTokenNetwork (config ^. clientID) (config ^. clientSecret) authorizationCode

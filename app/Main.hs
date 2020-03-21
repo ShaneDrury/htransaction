@@ -38,11 +38,11 @@ runapp Args {..} =
     . runCached @Config
     . runOutputOnCsv outfile
     . runGetTime
-    . runSaveTokens
     . runUseRefreshTokens
     . runGetLastImported bankAccountId
     . runOutputLastImportedOnFile bankAccountId
     . runGetAccessTokens
+    . runSaveTokens
     . tokenFromTagged @AccessToken
     . tokenFromTagged @Refresh
     . runValidToken
