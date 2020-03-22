@@ -139,7 +139,7 @@ runInputOnNetwork bankAccountId =
             Left err -> throw @HttpException err
     )
 
-retryOnUnauthorized :: Members '[Trace, Input [Transaction], Input (Tagged Refresh ValidToken), Error HttpException] r => Sem r a -> Sem r a
+retryOnUnauthorized :: Members '[Trace, Input [Transaction], Input (Tagged Refresh TokenEndpoint), Error HttpException] r => Sem r a -> Sem r a
 retryOnUnauthorized =
   intercept @(Input [Transaction])
     ( \case
@@ -151,7 +151,7 @@ retryOnUnauthorized =
                   then
                     ( do
                         trace "Unauthorized"
-                        input @(Tagged Refresh ValidToken)
+                        input @(Tagged Refresh TokenEndpoint)
                         input @[Transaction]
                     )
                   else throw e

@@ -13,7 +13,6 @@
 
 module Token
   ( ValidToken (..),
-    tokenFromTagged,
     runValidToken,
     runUseRefreshTokens,
     runSaveTokens,
@@ -22,6 +21,7 @@ module Token
     InvalidToken (..),
     Refresh,
     AccessToken,
+    TokenEndpoint,
   )
 where
 
@@ -115,16 +115,10 @@ useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
 
-toValidToken :: TokenEndpoint -> ValidToken
-toValidToken tokens = ValidToken $ BS.pack $ access_token tokens
+toValidToken :: Tagged b TokenEndpoint -> ValidToken
+toValidToken tagged = ValidToken $ BS.pack $ access_token (unTagged tagged)
 
-tokenFromTagged :: forall b r a. (Members '[Input (Tagged b TokenEndpoint)] r) => Sem (Input (Tagged b ValidToken) ': r) a -> Sem r a
-tokenFromTagged = interpret $ \case
-  Input -> do
-    tokens <- unTagged <$> input @(Tagged b TokenEndpoint)
-    return $ Tagged @b $ toValidToken tokens
-
-runValidToken :: (Members '[Input Config, Input UTCTime, Input (Tagged AccessToken ValidToken), Input (Tagged Refresh ValidToken)] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runValidToken :: (Members '[Input Config, Input UTCTime, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => Sem (Input ValidToken ': r) a -> Sem r a
 runValidToken = interpret $ \case
   Input -> do
     config <- input
@@ -134,11 +128,11 @@ runValidToken = interpret $ \case
           Just expires -> do
             currentTime <- input
             if expires <= currentTime
-              then unTagged <$> input @(Tagged Refresh ValidToken)
+              then toValidToken <$> input @(Tagged Refresh TokenEndpoint)
               else return $ ValidToken $ BS.pack t
-          Nothing -> unTagged <$> input @(Tagged AccessToken ValidToken)
+          Nothing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
         return $ ValidToken $ BS.pack t
-      Nothing -> unTagged <$> input @(Tagged AccessToken ValidToken)
+      Nothing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
 
 runUseRefreshTokens :: (Members '[Embed IO, Input Config, Trace] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
 runUseRefreshTokens = interpret $ \case
