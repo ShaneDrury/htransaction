@@ -44,7 +44,8 @@ runapp Args {..} =
     . runGetAccessTokens
     . runSaveTokens
     . runValidToken
-    . runInputOnNetwork bankAccountId
+    . runApiManagerOnNetwork
+    . runInputOnApi bankAccountId
     . retryOnUnauthorized
     . runTransactionsManager
 

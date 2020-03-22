@@ -14,13 +14,14 @@
 module Transaction
   ( Transaction,
     latestTransaction,
-    runInputOnNetwork,
+    runInputOnApi,
     runOutputOnCsv,
     retryOnUnauthorized,
     TransactionsManager,
     getTransactions,
     runTransactionsManager,
     outputTransactions,
+    runApiManagerOnNetwork,
   )
 where
 
@@ -125,19 +126,29 @@ isUnauthorized e = case statusP e of
   Just status -> status == Status.unauthorized401
   Nothing -> False
 
-runInputOnNetwork :: (Members '[Embed IO, Input LastImported, Trace, Input ValidToken, Error HttpException] r) => Int -> Sem (Input [Transaction] : r) a -> Sem r a
-runInputOnNetwork bankAccountId =
+data ApiManager m a where
+  GetApiTransactions :: Int -> Day -> ApiManager m TransactionsEndpoint
+
+$(makeSem ''ApiManager)
+
+runInputOnApi :: (Members '[Input LastImported, ApiManager, Trace] r) => Int -> Sem (Input [Transaction] : r) a -> Sem r a
+runInputOnApi bankAccountId =
   interpret @(Input [Transaction])
     ( \case
         Input -> do
           (LastImported fromDate) <- input
-          token <- input @ValidToken
           trace $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
-          result <- embed $ E.try (getTransactionsNetwork bankAccountId fromDate token)
-          case result of
-            Right r -> return $ bank_transactions r
-            Left err -> throw @HttpException err
+          bank_transactions <$> getApiTransactions bankAccountId fromDate
     )
+
+runApiManagerOnNetwork :: (Members '[Embed IO, Error HttpException, Input ValidToken] r) => Sem (ApiManager : r) a -> Sem r a
+runApiManagerOnNetwork = interpret $ \case
+  GetApiTransactions bankAccountId fromDate -> do
+    token <- input @ValidToken
+    result <- embed $ E.try (getTransactionsNetwork bankAccountId fromDate token)
+    case result of
+      Right r -> return r
+      Left err -> throw @HttpException err
 
 retryOnUnauthorized :: Members '[Trace, Input [Transaction], Input (Tagged Refresh TokenEndpoint), Error HttpException] r => Sem r a -> Sem r a
 retryOnUnauthorized =
