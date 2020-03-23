@@ -8,7 +8,6 @@
 
 module Polysemy.Cached
   ( runCached,
-    Cached,
   )
 where
 

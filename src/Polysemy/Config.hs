@@ -13,7 +13,8 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Polysemy.Config
-  ( runGetConfigTest,
+  ( runGetConfig,
+    runGetConfigTest,
     runWriteConfig,
     getConfig,
     ConfigM,
@@ -21,7 +22,6 @@ module Polysemy.Config
     getBankAccounts,
     runBankAccountsMOnConfig,
     runConfigM,
-    runCacheConfig,
   )
 where
 
@@ -33,10 +33,8 @@ import qualified Data.ByteString.Lazy.Char8 as S
 import qualified Data.Map as Map
 import Data.Time
 import Polysemy
-import Polysemy.Cached
 import Polysemy.Input
 import Polysemy.Output
-import Polysemy.State
 import Polysemy.Trace
 import Types
 import Prelude
@@ -45,6 +43,10 @@ data ConfigM m a where
   GetConfig :: ConfigM m Config
 
 $(makeSem ''ConfigM)
+
+runConfigM :: (Members '[Input Config] r) => Sem (ConfigM : r) a -> Sem r a
+runConfigM = interpret $ \case
+  GetConfig -> input @Config
 
 data BankAccountsM m a where
   GetBankAccounts :: BankAccountsM m BankAccounts
@@ -55,9 +57,9 @@ runBankAccountsMOnConfig :: (Members '[ConfigM] r) => Sem (BankAccountsM : r) a 
 runBankAccountsMOnConfig = interpret $ \case
   GetBankAccounts -> (^. bankAccounts) <$> getConfig
 
-runConfigM :: (Members '[Trace, Embed IO] r) => FilePath -> Sem (ConfigM ': r) a -> Sem r a
-runConfigM fp = interpret $ \case
-  GetConfig -> do
+runGetConfig :: (Members '[Trace, Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
+runGetConfig fp = interpret $ \case
+  Input -> do
     trace $ "Loading config from " ++ fp
     ecfg <- embed $ eitherDecodeFileStrict fp
     case ecfg of
@@ -82,14 +84,3 @@ runGetConfigTest = interpret $ \case
           _clientSecret = "secret",
           _tokenExpiresAt = Nothing
         }
-
--- TODO: Can we get rid of Input Config, and State (Cached Config) explicitly?
--- potentially explicitly type in-betweeny bits, or use type applications
-
-runCacheConfig :: (Members '[ConfigM, Output Config, Trace] r) => Sem (State (Cached Config) : Input Config : r) a -> Sem r a
-runCacheConfig =
-  interpret @(Input Config)
-    ( \case
-        Input -> getConfig
-    )
-    . runCached
