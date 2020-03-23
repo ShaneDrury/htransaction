@@ -44,6 +44,7 @@ import qualified Network.HTTP.Types.Status as Status
 import Polysemy
 import Polysemy.Error
 import Polysemy.Input
+import Polysemy.LastImported
 import Polysemy.Output
 import Polysemy.Trace
 import Token
@@ -71,6 +72,8 @@ data TransactionsManager m a where
   OutputTransactions :: [Transaction] -> TransactionsManager m ()
 
 makeSem ''TransactionsManager
+
+-- TODO: Maybe eliminate Input [Transaction]
 
 runTransactionsManager ::
   ( Members
@@ -152,7 +155,7 @@ $(makeSem ''ApiManager)
 
 runInputOnApi ::
   ( Members
-      '[ Input LastImported,
+      '[ LastImportedManager,
          ApiManager,
          Trace
        ]
@@ -165,7 +168,7 @@ runInputOnApi bankAccountId =
   interpret @(Input [Transaction])
     ( \case
         Input -> do
-          (LastImported fromDate) <- input
+          (LastImported fromDate) <- getLastImported
           trace $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
           bank_transactions <$> getApiTransactions bankAccountId fromDate
     )

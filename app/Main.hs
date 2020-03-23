@@ -40,11 +40,13 @@ runapp Args {..} =
     . runGetTime
     . runUseRefreshTokens
     . runGetLastImported bankAccountId
+    . runLastImportedManager
     . runOutputLastImportedOnFile bankAccountId
     . runGetAccessTokens
     . runSaveTokens
     . runValidToken
     . runApiManagerOnNetwork
+    . runLastImportedManager
     . runInputOnApi bankAccountId
     . retryOnUnauthorized
     . runTransactionsManager

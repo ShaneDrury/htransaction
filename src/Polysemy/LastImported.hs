@@ -1,6 +1,13 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -8,6 +15,9 @@ module Polysemy.LastImported
   ( runOutputLastImportedOnStdout,
     runOutputLastImportedOnFile,
     runGetLastImported,
+    LastImportedManager,
+    getLastImported,
+    runLastImportedManager,
   )
 where
 
@@ -22,15 +32,24 @@ import Polysemy.Trace
 import Types
 import Prelude
 
+data LastImportedManager m a where
+  GetLastImported :: LastImportedManager m LastImported
+
+$(makeSem ''LastImportedManager)
+
+runLastImportedManager :: (Members '[Input LastImported] r) => Sem (LastImportedManager : r) a -> Sem r a
+runLastImportedManager = interpret $ \case
+  GetLastImported -> input @LastImported
+
 runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[Input LastImported, Input Config, Output Config, Trace] r) => Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile :: (Members '[LastImportedManager, Input Config, Output Config, Trace] r) => Int -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile bankAccountId = interpret $ \case
   Output day -> do
     originalConfig <- input
-    originalDay <- input
+    originalDay <- getLastImported
     when (day /= originalDay) $ do
       trace $ "Outputting last imported day of " ++ show day
       output (updateConfig bankAccountId day originalConfig)
