@@ -1,14 +1,23 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Polysemy.Config
   ( runGetConfig,
     runGetConfigTest,
     runWriteConfig,
+    getConfig,
+    ConfigM,
   )
 where
 
@@ -24,6 +33,11 @@ import Polysemy.Output
 import Polysemy.Trace
 import Types
 import Prelude
+
+data ConfigM m a where
+  GetConfig :: ConfigM m Config
+
+$(makeSem ''ConfigM)
 
 runGetConfig :: (Members '[Trace, Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
 runGetConfig fp = interpret $ \case

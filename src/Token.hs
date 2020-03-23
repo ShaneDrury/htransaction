@@ -36,6 +36,7 @@ import Data.Time
 import GHC.Generics
 import Network.HTTP.Req
 import Polysemy
+import Polysemy.Config
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.Trace
@@ -118,10 +119,10 @@ authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=
 toValidToken :: Tagged b TokenEndpoint -> ValidToken
 toValidToken tagged = ValidToken $ BS.pack $ access_token (unTagged tagged)
 
-runValidToken :: (Members '[Input Config, Input UTCTime, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runValidToken :: (Members '[ConfigM, Input UTCTime, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => Sem (Input ValidToken ': r) a -> Sem r a
 runValidToken = interpret $ \case
   Input -> do
-    config <- input
+    config <- getConfig
     case config ^. token of
       Just t -> do
         _ <- case config ^. tokenExpiresAt of
@@ -134,10 +135,10 @@ runValidToken = interpret $ \case
         return $ ValidToken $ BS.pack t
       Nothing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
 
-runUseRefreshTokens :: (Members '[Embed IO, Input Config, Trace] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
+runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Trace] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
 runUseRefreshTokens = interpret $ \case
   Input -> do
-    config <- input
+    config <- getConfig
     trace "Trying to refresh tokens"
     embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
 
@@ -145,20 +146,20 @@ runGetTime :: (Members '[Embed IO] r) => Sem (Input UTCTime : r) a -> Sem r a
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
-runSaveTokens :: forall b r a. (Members '[Input UTCTime, Input Config, Output Config, Trace] r) => Sem (Input (Tagged b TokenEndpoint) : r) a -> Sem (Input (Tagged b TokenEndpoint) : r) a
+runSaveTokens :: forall b r a. (Members '[Input UTCTime, ConfigM, Output Config, Trace] r) => Sem (Input (Tagged b TokenEndpoint) : r) a -> Sem (Input (Tagged b TokenEndpoint) : r) a
 runSaveTokens = intercept @(Input (Tagged b TokenEndpoint)) $ \case
   Input -> do
     taggedTokens <- input @(Tagged b TokenEndpoint)
     let tokens = unTagged taggedTokens
-    originalConfig <- input
+    originalConfig <- getConfig
     currentTime <- input
     output (withNewTokens tokens originalConfig currentTime)
     return taggedTokens
 
-runGetAccessTokens :: (Members '[Embed IO, Input Config, Trace] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
+runGetAccessTokens :: (Members '[Embed IO, ConfigM, Trace] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
 runGetAccessTokens = interpret $ \case
   Input -> do
-    config <- input
+    config <- getConfig
     embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
     authorizationCode <- embed getLine
     embed $ getAccessTokenNetwork (config ^. clientID) (config ^. clientSecret) authorizationCode

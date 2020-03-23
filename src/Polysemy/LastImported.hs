@@ -26,6 +26,7 @@ import Control.Lens
 import Control.Monad
 import qualified Data.Map as Map
 import Polysemy
+import Polysemy.Config
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.Trace
@@ -45,19 +46,19 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImpo
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[LastImportedManager, Input Config, Output Config, Trace] r) => Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Output Config, Trace] r) => Int -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile bankAccountId = interpret $ \case
   Output day -> do
-    originalConfig <- input
+    originalConfig <- getConfig
     originalDay <- getLastImported
     when (day /= originalDay) $ do
       trace $ "Outputting last imported day of " ++ show day
       output (updateConfig bankAccountId day originalConfig)
 
-runGetLastImported :: (Members '[Input Config] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
+runGetLastImported :: (Members '[ConfigM] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
 runGetLastImported bankAccountId = interpret $ \case
   Input -> do
-    cfg <- input @Config
+    cfg <- getConfig
     case Map.lookup bankAccountId (cfg ^. bankAccounts) of
       Just day -> return day
       Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId
