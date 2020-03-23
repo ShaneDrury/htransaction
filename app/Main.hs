@@ -38,6 +38,8 @@ runapp Args {..} =
     . runCached @Config
     . runOutputOnCsv outfile
     . runGetTime
+    . runConfigM
+    . runBankAccountsMOnConfig
     . runUseRefreshTokens
     . runGetLastImported bankAccountId
     . runLastImportedManager

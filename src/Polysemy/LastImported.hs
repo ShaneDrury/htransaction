@@ -22,7 +22,6 @@ module Polysemy.LastImported
 where
 
 import Config
-import Control.Lens
 import Control.Monad
 import qualified Data.Map as Map
 import Polysemy
@@ -55,10 +54,10 @@ runOutputLastImportedOnFile bankAccountId = interpret $ \case
       trace $ "Outputting last imported day of " ++ show day
       output (updateConfig bankAccountId day originalConfig)
 
-runGetLastImported :: (Members '[ConfigM] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
+runGetLastImported :: (Members '[BankAccountsM] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
 runGetLastImported bankAccountId = interpret $ \case
   Input -> do
-    cfg <- getConfig
-    case Map.lookup bankAccountId (cfg ^. bankAccounts) of
+    bankAccounts <- getBankAccounts
+    case Map.lookup bankAccountId bankAccounts of
       Just day -> return day
       Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId

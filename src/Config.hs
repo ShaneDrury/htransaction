@@ -14,6 +14,7 @@ module Config
     refreshToken,
     updateConfig,
     bankAccounts,
+    BankAccounts,
   )
 where
 
@@ -26,9 +27,11 @@ import GHC.Generics
 import Types
 import Prelude
 
+type BankAccounts = Map.Map Int LastImported
+
 data Config
   = Config
-      { _bankAccounts :: Map.Map Int LastImported,
+      { _bankAccounts :: BankAccounts,
         _token :: Maybe String,
         _refreshToken :: Maybe String,
         _clientID :: String,

@@ -18,10 +18,15 @@ module Polysemy.Config
     runWriteConfig,
     getConfig,
     ConfigM,
+    BankAccountsM,
+    getBankAccounts,
+    runBankAccountsMOnConfig,
+    runConfigM,
   )
 where
 
 import Config
+import Control.Lens
 import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as S
@@ -38,6 +43,19 @@ data ConfigM m a where
   GetConfig :: ConfigM m Config
 
 $(makeSem ''ConfigM)
+
+runConfigM :: (Members '[Input Config] r) => Sem (ConfigM : r) a -> Sem r a
+runConfigM = interpret $ \case
+  GetConfig -> input @Config
+
+data BankAccountsM m a where
+  GetBankAccounts :: BankAccountsM m BankAccounts
+
+$(makeSem ''BankAccountsM)
+
+runBankAccountsMOnConfig :: (Members '[ConfigM] r) => Sem (BankAccountsM : r) a -> Sem r a
+runBankAccountsMOnConfig = interpret $ \case
+  GetBankAccounts -> (^. bankAccounts) <$> getConfig
 
 runGetConfig :: (Members '[Trace, Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
 runGetConfig fp = interpret $ \case
