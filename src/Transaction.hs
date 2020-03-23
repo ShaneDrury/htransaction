@@ -72,7 +72,15 @@ data TransactionsManager m a where
 
 makeSem ''TransactionsManager
 
-runTransactionsManager :: (Members '[Input [Transaction], Output [Transaction]] r) => Sem (TransactionsManager : r) a -> Sem r a
+runTransactionsManager ::
+  ( Members
+      '[ Input [Transaction],
+         Output [Transaction]
+       ]
+      r
+  ) =>
+  Sem (TransactionsManager : r) a ->
+  Sem r a
 runTransactionsManager = interpret $ \case
   GetTransactions -> input @[Transaction]
   OutputTransactions tx -> output tx
@@ -96,14 +104,25 @@ getTransactionsNetwork bankAccountId day (ValidToken token) = runReq defaultHttp
           <> "sort" =: ("dated_on" :: Text)
           <> "per_page" =: (100 :: Int)
           <> oAuth2Bearer token
-          <> header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
+          <> header
+            "User-Agent"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
       )
   return (responseBody r :: TransactionsEndpoint)
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ toDay . dated_on $ maximumBy (comparing (toDay . dated_on)) tx
 
-runOutputOnCsv :: (Members '[Embed IO, Trace] r) => FilePath -> Sem (Output [Transaction] ': r) a -> Sem r a
+runOutputOnCsv ::
+  ( Members
+      '[ Embed IO,
+         Trace
+       ]
+      r
+  ) =>
+  FilePath ->
+  Sem (Output [Transaction] ': r) a ->
+  Sem r a
 runOutputOnCsv fp = interpret $ \case
   Output tx -> do
     trace $ "Writing to " ++ fp
@@ -131,7 +150,17 @@ data ApiManager m a where
 
 $(makeSem ''ApiManager)
 
-runInputOnApi :: (Members '[Input LastImported, ApiManager, Trace] r) => Int -> Sem (Input [Transaction] : r) a -> Sem r a
+runInputOnApi ::
+  ( Members
+      '[ Input LastImported,
+         ApiManager,
+         Trace
+       ]
+      r
+  ) =>
+  Int ->
+  Sem (Input [Transaction] : r) a ->
+  Sem r a
 runInputOnApi bankAccountId =
   interpret @(Input [Transaction])
     ( \case
@@ -141,7 +170,16 @@ runInputOnApi bankAccountId =
           bank_transactions <$> getApiTransactions bankAccountId fromDate
     )
 
-runApiManagerOnNetwork :: (Members '[Embed IO, Error HttpException, Input ValidToken] r) => Sem (ApiManager : r) a -> Sem r a
+runApiManagerOnNetwork ::
+  ( Members
+      '[ Embed IO,
+         Error HttpException,
+         Input ValidToken
+       ]
+      r
+  ) =>
+  Sem (ApiManager : r) a ->
+  Sem r a
 runApiManagerOnNetwork = interpret $ \case
   GetApiTransactions bankAccountId fromDate -> do
     token <- input @ValidToken
@@ -150,7 +188,16 @@ runApiManagerOnNetwork = interpret $ \case
       Right r -> return r
       Left err -> throw @HttpException err
 
-retryOnUnauthorized :: Members '[Trace, Input [Transaction], Input (Tagged Refresh TokenEndpoint), Error HttpException] r => Sem r a -> Sem r a
+retryOnUnauthorized ::
+  Members
+    '[ Trace,
+       Input [Transaction],
+       Input (Tagged Refresh TokenEndpoint),
+       Error HttpException
+     ]
+    r =>
+  Sem r a ->
+  Sem r a
 retryOnUnauthorized =
   intercept @(Input [Transaction])
     ( \case
