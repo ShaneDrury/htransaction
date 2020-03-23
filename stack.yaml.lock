@@ -5,22 +5,22 @@
 
 packages:
 - completed:
-    hackage: polysemy-plugin-0.2.4.0@sha256:374813a8a6d3fb0a09524b959cbce604186c7055983f9ca08948778cd7bfa485,3083
+    hackage: polysemy-plugin-0.2.5.0@sha256:67e30be568a141b852aace1a60e180cb5060fbb2835365a81a3ea779536d6d35,2952
     pantry-tree:
       size: 1232
-      sha256: ae77b6a2c1df51a17ee2116166cc38b7ec258b6db112aa58c3935b7a02556f2e
+      sha256: 5c90dac2eba48b4e337b302347c233ecaedb63e333641e094e718a548ac86711
   original:
-    hackage: polysemy-plugin-0.2.4.0
+    hackage: polysemy-plugin-0.2.5.0
 - completed:
     hackage: ghc-tcplugins-extra-0.3.2@sha256:1bbfd4449c3669a31618ea0ebc5d00d980a53988daad3b6218bab5c8cdff268d,1687
     pantry-tree:
       size: 331
       sha256: 4b16989344380c912e476dc232cc58264837b498e31a8bf16a17092ba6c1cfb9
   original:
-    hackage: ghc-tcplugins-extra-0.3.2
+    hackage: ghc-tcplugins-extra-0.3.2@sha256:1bbfd4449c3669a31618ea0ebc5d00d980a53988daad3b6218bab5c8cdff268d,1687
 snapshots:
 - completed:
-    size: 491372
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/15/5.yaml
-    sha256: 1b549cfff328040c382a70a84a2087aac8dab6d778bf92f32a93a771a1980dfc
-  original: lts-15.5
+    size: 499083
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2020/3/9.yaml
+    sha256: 50f89cfb4370c15e4224a34a2316214d54e8a62b19a379fc2b1dc57ea3d5f358
+  original: nightly-2020-03-09
