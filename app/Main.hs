@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Main
   ( main,
@@ -8,10 +7,8 @@ module Main
 where
 
 import Cli
-import Config
 import Control.Monad
 import Polysemy
-import Polysemy.Cached
 import Polysemy.Config
 import Polysemy.LastImported
 import Polysemy.Output
@@ -33,12 +30,11 @@ runapp Args {..} =
   runM
     . handleErrors
     . runOutputOnLog verbose
-    . runGetConfig configFile
     . runWriteConfig configFile
-    . runCached @Config
     . runOutputOnCsv outfile
     . runGetTime
-    . runConfigM
+    . runConfigM configFile
+    . runCacheConfig
     . runBankAccountsMOnConfig
     . runUseRefreshTokens
     . runGetLastImported bankAccountId
