@@ -45,7 +45,8 @@ runapp Args {..} =
     . runLastImportedManager
     . runOutputLastImportedOnFile bankAccountId
     . runGetAccessTokens
-    . runSaveTokens
+    . runSaveRefreshTokens
+    . runSaveAccessTokens
     . runValidToken
     . runApiManagerOnNetwork
     . runLastImportedManager

@@ -15,7 +15,8 @@ module Token
   ( ValidToken (..),
     runValidToken,
     runUseRefreshTokens,
-    runSaveTokens,
+    runSaveRefreshTokens,
+    runSaveAccessTokens,
     runGetAccessTokens,
     runGetTime,
     InvalidToken (..),
@@ -146,10 +147,20 @@ runGetTime :: (Members '[Embed IO] r) => Sem (Input UTCTime : r) a -> Sem r a
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
-runSaveTokens :: forall b r a. (Members '[Input UTCTime, ConfigM, Output Config, Trace] r) => Sem (Input (Tagged b TokenEndpoint) : r) a -> Sem (Input (Tagged b TokenEndpoint) : r) a
-runSaveTokens = intercept @(Input (Tagged b TokenEndpoint)) $ \case
+runSaveRefreshTokens :: (Members '[Input UTCTime, ConfigM, Output Config, Input (Tagged Refresh TokenEndpoint), Trace] r) => Sem r a -> Sem r a
+runSaveRefreshTokens = intercept @(Input (Tagged Refresh TokenEndpoint)) $ \case
   Input -> do
-    taggedTokens <- input @(Tagged b TokenEndpoint)
+    taggedTokens <- input @(Tagged Refresh TokenEndpoint)
+    let tokens = unTagged taggedTokens
+    originalConfig <- getConfig
+    currentTime <- input
+    output (withNewTokens tokens originalConfig currentTime)
+    return taggedTokens
+
+runSaveAccessTokens :: (Members '[Input UTCTime, ConfigM, Output Config, Input (Tagged AccessToken TokenEndpoint), Trace] r) => Sem r a -> Sem r a
+runSaveAccessTokens = intercept @(Input (Tagged AccessToken TokenEndpoint)) $ \case
+  Input -> do
+    taggedTokens <- input @(Tagged AccessToken TokenEndpoint)
     let tokens = unTagged taggedTokens
     originalConfig <- getConfig
     currentTime <- input
