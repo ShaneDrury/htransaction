@@ -36,6 +36,8 @@ dependencies:
 - text
 - http-client
 - http-types
+- hspec
+- hspec-discover
 
 library:
   source-dirs: src
