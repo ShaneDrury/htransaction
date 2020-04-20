@@ -17,7 +17,7 @@ module Transaction
     runInputOnApi,
     runOutputOnCsv,
     retryOnUnauthorized,
-    TransactionsManager,
+    TransactionsManager(..),
     getTransactions,
     runTransactionsManager,
     outputTransactions,

@@ -15,7 +15,7 @@ module Polysemy.LastImported
   ( runOutputLastImportedOnStdout,
     runOutputLastImportedOnFile,
     runGetLastImported,
-    LastImportedManager,
+    LastImportedManager(..),
     getLastImported,
     runLastImportedManager,
   )
