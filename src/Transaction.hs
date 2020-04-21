@@ -12,7 +12,8 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Transaction
-  ( Transaction,
+  ( Transaction(..),
+    TransactionDate(..),
     latestTransaction,
     runInputOnApi,
     runOutputOnCsv,
