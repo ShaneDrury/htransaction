@@ -12,13 +12,13 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Transaction
-  ( Transaction(..),
-    TransactionDate(..),
+  ( Transaction (..),
+    TransactionDate (..),
     latestTransaction,
     runInputOnApi,
     runOutputOnCsv,
     retryOnUnauthorized,
-    TransactionsManager(..),
+    TransactionsManager (..),
     getTransactions,
     runTransactionsManager,
     outputTransactions,
