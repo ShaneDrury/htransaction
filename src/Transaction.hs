@@ -22,7 +22,9 @@ module Transaction
     getTransactions,
     runTransactionsManager,
     outputTransactions,
+    ApiManager (..),
     runApiManagerOnNetwork,
+    TransactionsEndpoint (..),
   )
 where
 

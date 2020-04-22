@@ -22,7 +22,7 @@ module Token
     InvalidToken (..),
     Refresh,
     AccessToken,
-    TokenEndpoint,
+    TokenEndpoint (..),
   )
 where
 
