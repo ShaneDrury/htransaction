@@ -18,6 +18,7 @@ module Types
     runLoggerAsOutput,
     runLoggerOnRainbow,
     warn,
+    err,
     LogType (..),
   )
 where
@@ -51,7 +52,7 @@ handleErrors =
   runError @AppError
     . mapError HttpError
 
-data LogType = Info | Warning deriving stock (Eq, Show)
+data LogType = Info | Warning | LogError deriving stock (Eq, Show)
 
 type LogMsg = (LogType, String)
 
@@ -63,12 +64,16 @@ info s = log (Info, s)
 warn :: Members '[Logger] r => String -> Sem r ()
 warn s = log (Warning, s)
 
+err :: Members '[Logger] r => String -> Sem r ()
+err s = log (LogError, s)
+
 runLoggerOnRainbow :: (Members '[Embed IO] r) => Sem (Log LogMsg ': r) a -> Sem r a
 runLoggerOnRainbow =
   interpret
     ( \(Log (logType, s)) -> case logType of
         Info -> embed $ putChunkLn (msg s)
         Warning -> embed $ putChunkLn $ fore yellow $ bold (msg s)
+        LogError -> embed $ putChunkLn $ fore red $ bold (msg s)
     )
   where
     msg = chunk . T.pack

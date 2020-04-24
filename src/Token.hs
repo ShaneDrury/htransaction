@@ -140,7 +140,7 @@ runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => Sem (Input (T
 runUseRefreshTokens = interpret $ \case
   Input -> do
     config <- getConfig
-    info "Trying to refresh tokens"
+    warn "Trying to refresh tokens"
     embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
 
 runGetTime :: (Members '[Embed IO] r) => Sem (Input UTCTime : r) a -> Sem r a

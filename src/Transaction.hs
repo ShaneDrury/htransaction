@@ -213,7 +213,7 @@ retryOnUnauthorized =
                 if isUnauthorized e
                   then
                     ( do
-                        info "Unauthorized"
+                        err "Unauthorized"
                         input @(Tagged Refresh TokenEndpoint)
                         input @[Transaction]
                     )
