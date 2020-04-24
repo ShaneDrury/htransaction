@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
@@ -44,12 +45,18 @@ handleErrors =
   runError @AppError
     . mapError HttpError
 
-type LogMsg = String
+data LogType = Info deriving stock (Eq, Show)
+
+type LogMsg = (LogType, String)
 
 type Logger = Log LogMsg
 
 info :: Members '[Logger] r => String -> Sem r ()
-info s = log s
+info s = log (Info, s)
 
 runLoggerAsTrace :: (Members '[Trace] r) => Sem (Log LogMsg ': r) a -> Sem r a
-runLoggerAsTrace = runLogAsTrace
+runLoggerAsTrace =
+  interpret
+    ( \(Log (logType, msg)) -> case logType of
+        Info -> trace msg
+    )
