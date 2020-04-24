@@ -18,6 +18,6 @@ app :: (Members '[TransactionsManager, Output LastImported, Logger] r) => Sem r 
 app = do
   tx <- getTransactions
   info $ "Number of transactions: " ++ show (length tx)
-  when (length tx == 100) (info "WARNING: Number of transactions close to limit")
+  when (length tx == 100) (warn "WARNING: Number of transactions close to limit")
   unless (null tx) (output (latestTransaction tx))
   outputTransactions tx

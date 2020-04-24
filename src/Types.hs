@@ -16,6 +16,7 @@ module Types
     info,
     Logger,
     runLoggerAsTrace,
+    warn,
   )
 where
 
@@ -45,7 +46,7 @@ handleErrors =
   runError @AppError
     . mapError HttpError
 
-data LogType = Info deriving stock (Eq, Show)
+data LogType = Info | Warning deriving stock (Eq, Show)
 
 type LogMsg = (LogType, String)
 
@@ -54,9 +55,13 @@ type Logger = Log LogMsg
 info :: Members '[Logger] r => String -> Sem r ()
 info s = log (Info, s)
 
+warn :: Members '[Logger] r => String -> Sem r ()
+warn s = log (Warning, s)
+
 runLoggerAsTrace :: (Members '[Trace] r) => Sem (Log LogMsg ': r) a -> Sem r a
 runLoggerAsTrace =
   interpret
     ( \(Log (logType, msg)) -> case logType of
         Info -> trace msg
+        Warning -> trace msg
     )
