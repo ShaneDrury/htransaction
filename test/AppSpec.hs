@@ -93,10 +93,10 @@ accessTokenEndpoint =
         refresh_token = Just "foo"
       }
 
-transactionsEndpoint :: TransactionsEndpoint
-transactionsEndpoint =
+transactionsEndpoint :: [Transaction] -> TransactionsEndpoint
+transactionsEndpoint tx =
   TransactionsEndpoint
-    { bank_transactions = testTransactions
+    { bank_transactions = tx
     }
 
 testTransactions :: [Transaction]
@@ -108,12 +108,12 @@ testTransactions =
       }
   ]
 
-runApiManager :: Sem (ApiManager : r) a -> Sem r a
-runApiManager = interpret $ \case
-  GetApiTransactions _ _ -> return transactionsEndpoint
+runApiManager :: [Transaction] -> Sem (ApiManager : r) a -> Sem r a
+runApiManager tx = interpret $ \case
+  GetApiTransactions _ _ -> return $ transactionsEndpoint tx
 
-runAppDeep :: Sem '[TransactionsManager, Output [Transaction], Input [Transaction], ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Trace, Error H.HttpException, Error AppError] a -> Either AppError ([String], ([Config], ([[Transaction]], a)))
-runAppDeep =
+runAppDeep :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Input [Transaction], ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Trace, Error H.HttpException, Error AppError] a -> Either AppError ([String], ([Config], ([[Transaction]], a)))
+runAppDeep tx =
   run
     . handleErrors
     . runTraceList
@@ -132,7 +132,7 @@ runAppDeep =
     . runSaveAccessTokens
     . runValidToken
     . runLastImportedManager
-    . runApiManager
+    . runApiManager tx
     . runInputOnApi 1
     . retryOnUnauthorized
     . runOutputList @([Transaction])
@@ -180,7 +180,7 @@ spec = do
                      )
     context "happy, deep path" $ do
       it "imports transactions, outputs them, updates config" $ do
-        case runAppDeep app of
+        case runAppDeep testTransactions app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -195,4 +195,14 @@ spec = do
                                ()
                              )
                            )
+                         )
+      it "imports 0 transactions" $ do
+        case runAppDeep [] app of
+          Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
+          Right r ->
+            r
+              `shouldBe` ( [ "Getting transactions from 1 after 2020-04-19",
+                             "Number of transactions: 0"
+                           ],
+                           ([], ([[]], ()))
                          )
