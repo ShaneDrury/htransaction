@@ -24,7 +24,7 @@ runapp Args {..} =
   runM
     . handleErrors
     . runOutputOnLog verbose
-    . runLoggerAsTrace
+    . runLoggerOnRainbow
     . runGetConfig configFile
     . runWriteConfig configFile
     . runCached @Config

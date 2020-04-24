@@ -41,19 +41,19 @@ runTransactionsManagerSimple txs = interpret $ \case
   GetTransactions -> return txs
   OutputTransactions tx -> output tx
 
-runAppEmpty :: Sem '[Output LastImported, TransactionsManager, Logger, Trace] () -> ([String], ([LastImported], ()))
+runAppEmpty :: Sem '[Output LastImported, TransactionsManager, Logger, Output LogMsg] () -> ([LogMsg], ([LastImported], ()))
 runAppEmpty =
   run
-    . runTraceList
-    . runLoggerAsTrace
+    . runOutputList @LogMsg
+    . runLoggerAsOutput
     . runTransactionsManagerEmpty
     . runOutputList @LastImported
 
-runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Output LastImported, Logger, Trace] () -> ([String], ([LastImported], ([[Transaction]], ())))
+runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Output LastImported, Logger, Output LogMsg] () -> ([LogMsg], ([LastImported], ([[Transaction]], ())))
 runAppSimple transactions =
   run
-    . runTraceList
-    . runLoggerAsTrace
+    . runOutputList @LogMsg
+    . runLoggerAsOutput
     . runOutputList @LastImported
     . runOutputList @([Transaction])
     . runTransactionsManagerSimple transactions
@@ -114,12 +114,12 @@ runApiManager :: [Transaction] -> Sem (ApiManager : r) a -> Sem r a
 runApiManager tx = interpret $ \case
   GetApiTransactions _ _ -> return $ transactionsEndpoint tx
 
-runAppDeep :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Input [Transaction], ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Trace, Error H.HttpException, Error AppError] a -> Either AppError ([String], ([Config], ([[Transaction]], a)))
+runAppDeep :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Input [Transaction], ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Output LogMsg, Error H.HttpException, Error AppError] a -> Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))
 runAppDeep tx =
   run
     . handleErrors
-    . runTraceList
-    . runLoggerAsTrace
+    . runOutputList @LogMsg
+    . runLoggerAsOutput
     . runInputConst testConfig
     . runOutputList @Config
     . runCached @Config
@@ -146,12 +146,12 @@ spec = do
   describe "app" $ do
     context "empty path" $ do
       it "imports nothing" $ do
-        (runAppEmpty app) `shouldBe` (["Number of transactions: 0"], ([], ()))
+        (runAppEmpty app) `shouldBe` ([(Info, "Number of transactions: 0")], ([], ()))
     context "happy, simple path" $ do
       context "with one transaction" $ do
         it "imports 1 transaction" $ do
           (runAppSimple testTransactions app)
-            `shouldBe` ( ["Number of transactions: 1"],
+            `shouldBe` ( [(Info, "Number of transactions: 1")],
                          ( [ LastImported $ fromGregorian 2020 4 20
                            ],
                            ( [ testTransactions
@@ -172,7 +172,7 @@ spec = do
               )
       it "imports 100 transaction and produces a warning" $ do
         (runAppSimple transactions_100 app)
-          `shouldBe` ( ["Number of transactions: 100", "WARNING: Number of transactions close to limit"],
+          `shouldBe` ( [(Info, "Number of transactions: 100"), (Warning, "WARNING: Number of transactions close to limit")],
                        ( [ LastImported $ fromGregorian 2020 4 20
                          ],
                          ( [ transactions_100
@@ -187,9 +187,9 @@ spec = do
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
-              `shouldBe` ( [ "Getting transactions from 1 after 2020-04-19",
-                             "Number of transactions: 1",
-                             "Outputting last imported day of LastImported 2020-04-20"
+              `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
+                             (Info, "Number of transactions: 1"),
+                             (Info, "Outputting last imported day of LastImported 2020-04-20")
                            ],
                            ( [ updateConfig 1 (LastImported $ fromGregorian 2020 4 20) testConfig
                              ],
@@ -204,8 +204,8 @@ spec = do
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
-              `shouldBe` ( [ "Getting transactions from 1 after 2020-04-19",
-                             "Number of transactions: 0"
+              `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
+                             (Info, "Number of transactions: 0")
                            ],
                            ([], ([[]], ()))
                          )

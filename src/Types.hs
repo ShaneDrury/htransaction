@@ -15,20 +15,25 @@ module Types
     LogMsg,
     info,
     Logger,
-    runLoggerAsTrace,
+    runLoggerAsOutput,
+    runLoggerOnRainbow,
     warn,
+    LogType (..),
   )
 where
 
 import Colog.Polysemy.Effect
 import Control.Monad
 import Data.Aeson
+import qualified Data.Text as T
 import Data.Time
 import GHC.Generics
 import qualified Network.HTTP.Req as H
 import Polysemy
 import Polysemy.Error
+import Polysemy.Output
 import Polysemy.Trace
+import Rainbow
 import Prelude hiding (log)
 
 newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
@@ -58,10 +63,18 @@ info s = log (Info, s)
 warn :: Members '[Logger] r => String -> Sem r ()
 warn s = log (Warning, s)
 
-runLoggerAsTrace :: (Members '[Trace] r) => Sem (Log LogMsg ': r) a -> Sem r a
-runLoggerAsTrace =
+runLoggerOnRainbow :: (Members '[Embed IO] r) => Sem (Log LogMsg ': r) a -> Sem r a
+runLoggerOnRainbow =
   interpret
-    ( \(Log (logType, msg)) -> case logType of
-        Info -> trace msg
-        Warning -> trace msg
+    ( \(Log (logType, s)) -> case logType of
+        Info -> embed $ putChunkLn (msg s)
+        Warning -> embed $ putChunkLn $ fore yellow $ bold (msg s)
+    )
+  where
+    msg = chunk . T.pack
+
+runLoggerAsOutput :: (Members '[Output LogMsg] r) => Sem (Log LogMsg ': r) a -> Sem r a
+runLoggerAsOutput =
+  interpret
+    ( \(Log logmsg) -> output logmsg
     )
