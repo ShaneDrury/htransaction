@@ -17,12 +17,11 @@ import Polysemy
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.State
-import Polysemy.Trace
 import Prelude
 
 data Cached a = Cached a | Dirty deriving (Eq, Show)
 
-runCached :: forall v a r. (Eq v, Members '[Trace, Input v, Output v] r) => Sem (State (Cached v) : r) a -> Sem r a
+runCached :: forall v a r. (Eq v, Members '[Input v, Output v] r) => Sem (State (Cached v) : r) a -> Sem r a
 runCached =
   evalState Dirty
     . intercept @(Input v)

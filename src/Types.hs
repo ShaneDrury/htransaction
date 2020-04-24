@@ -11,9 +11,14 @@ module Types
     LastImported (..),
     handleErrors,
     AppError (..),
+    LogMsg,
+    info,
+    Logger,
+    runLoggerAsTrace,
   )
 where
 
+import Colog.Polysemy.Effect
 import Control.Monad
 import Data.Aeson
 import Data.Time
@@ -22,7 +27,7 @@ import qualified Network.HTTP.Req as H
 import Polysemy
 import Polysemy.Error
 import Polysemy.Trace
-import Prelude
+import Prelude hiding (log)
 
 newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
@@ -38,3 +43,13 @@ handleErrors :: Sem (Error H.HttpException : Error AppError : r) a -> Sem r (Eit
 handleErrors =
   runError @AppError
     . mapError HttpError
+
+type LogMsg = String
+
+type Logger = Log LogMsg
+
+info :: Members '[Logger] r => String -> Sem r ()
+info s = log s
+
+runLoggerAsTrace :: (Members '[Trace] r) => Sem (Log LogMsg ': r) a -> Sem r a
+runLoggerAsTrace = runLogAsTrace

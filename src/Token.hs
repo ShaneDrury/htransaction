@@ -40,7 +40,7 @@ import Polysemy
 import Polysemy.Config
 import Polysemy.Input
 import Polysemy.Output
-import Polysemy.Trace
+import Types
 import Prelude
 
 newtype ValidToken = ValidToken BS.ByteString
@@ -136,18 +136,18 @@ runValidToken = interpret $ \case
         return $ ValidToken $ BS.pack t
       Nothing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
 
-runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Trace] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
+runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
 runUseRefreshTokens = interpret $ \case
   Input -> do
     config <- getConfig
-    trace "Trying to refresh tokens"
+    info "Trying to refresh tokens"
     embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
 
 runGetTime :: (Members '[Embed IO] r) => Sem (Input UTCTime : r) a -> Sem r a
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
-runSaveRefreshTokens :: (Members '[Input UTCTime, ConfigM, Output Config, Input (Tagged Refresh TokenEndpoint), Trace] r) => Sem r a -> Sem r a
+runSaveRefreshTokens :: (Members '[Input UTCTime, ConfigM, Output Config, Input (Tagged Refresh TokenEndpoint)] r) => Sem r a -> Sem r a
 runSaveRefreshTokens = intercept @(Input (Tagged Refresh TokenEndpoint)) $ \case
   Input -> do
     taggedTokens <- input @(Tagged Refresh TokenEndpoint)
@@ -157,7 +157,7 @@ runSaveRefreshTokens = intercept @(Input (Tagged Refresh TokenEndpoint)) $ \case
     output (withNewTokens tokens originalConfig currentTime)
     return taggedTokens
 
-runSaveAccessTokens :: (Members '[Input UTCTime, ConfigM, Output Config, Input (Tagged AccessToken TokenEndpoint), Trace] r) => Sem r a -> Sem r a
+runSaveAccessTokens :: (Members '[Input UTCTime, ConfigM, Output Config, Input (Tagged AccessToken TokenEndpoint)] r) => Sem r a -> Sem r a
 runSaveAccessTokens = intercept @(Input (Tagged AccessToken TokenEndpoint)) $ \case
   Input -> do
     taggedTokens <- input @(Tagged AccessToken TokenEndpoint)
@@ -167,7 +167,7 @@ runSaveAccessTokens = intercept @(Input (Tagged AccessToken TokenEndpoint)) $ \c
     output (withNewTokens tokens originalConfig currentTime)
     return taggedTokens
 
-runGetAccessTokens :: (Members '[Embed IO, ConfigM, Trace] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
+runGetAccessTokens :: (Members '[Embed IO, ConfigM] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
 runGetAccessTokens = interpret $ \case
   Input -> do
     config <- getConfig

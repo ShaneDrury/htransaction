@@ -38,6 +38,8 @@ dependencies:
 - http-types
 - hspec
 - hspec-discover
+- rainbow
+- co-log-polysemy
 
 library:
   source-dirs: src

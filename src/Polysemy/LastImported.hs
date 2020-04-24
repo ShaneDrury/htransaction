@@ -28,7 +28,6 @@ import Polysemy
 import Polysemy.Config
 import Polysemy.Input
 import Polysemy.Output
-import Polysemy.Trace
 import Types
 import Prelude
 
@@ -45,13 +44,13 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImpo
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Output Config, Trace] r) => Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Output Config, Logger] r) => Int -> Sem (Output LastImported ': r) a -> Sem r a
 runOutputLastImportedOnFile bankAccountId = interpret $ \case
   Output day -> do
     originalConfig <- getConfig
     originalDay <- getLastImported
     when (day /= originalDay) $ do
-      trace $ "Outputting last imported day of " ++ show day
+      info $ "Outputting last imported day of " ++ show day
       output (updateConfig bankAccountId day originalConfig)
 
 runGetLastImported :: (Members '[BankAccountsM] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a

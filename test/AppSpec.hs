@@ -41,17 +41,19 @@ runTransactionsManagerSimple txs = interpret $ \case
   GetTransactions -> return txs
   OutputTransactions tx -> output tx
 
-runAppEmpty :: Sem '[Output LastImported, TransactionsManager, Trace] () -> ([String], ([LastImported], ()))
+runAppEmpty :: Sem '[Output LastImported, TransactionsManager, Logger, Trace] () -> ([String], ([LastImported], ()))
 runAppEmpty =
   run
     . runTraceList
+    . runLoggerAsTrace
     . runTransactionsManagerEmpty
     . runOutputList @LastImported
 
-runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Output LastImported, Trace] () -> ([String], ([LastImported], ([[Transaction]], ())))
+runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Output LastImported, Logger, Trace] () -> ([String], ([LastImported], ([[Transaction]], ())))
 runAppSimple transactions =
   run
     . runTraceList
+    . runLoggerAsTrace
     . runOutputList @LastImported
     . runOutputList @([Transaction])
     . runTransactionsManagerSimple transactions
@@ -112,11 +114,12 @@ runApiManager :: [Transaction] -> Sem (ApiManager : r) a -> Sem r a
 runApiManager tx = interpret $ \case
   GetApiTransactions _ _ -> return $ transactionsEndpoint tx
 
-runAppDeep :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Input [Transaction], ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Trace, Error H.HttpException, Error AppError] a -> Either AppError ([String], ([Config], ([[Transaction]], a)))
+runAppDeep :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Input [Transaction], ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Trace, Error H.HttpException, Error AppError] a -> Either AppError ([String], ([Config], ([[Transaction]], a)))
 runAppDeep tx =
   run
     . handleErrors
     . runTraceList
+    . runLoggerAsTrace
     . runInputConst testConfig
     . runOutputList @Config
     . runCached @Config

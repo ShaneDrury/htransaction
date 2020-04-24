@@ -35,7 +35,6 @@ import Data.Time
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
-import Polysemy.Trace
 import Types
 import Prelude
 
@@ -57,19 +56,19 @@ runBankAccountsMOnConfig :: (Members '[ConfigM] r) => Sem (BankAccountsM : r) a 
 runBankAccountsMOnConfig = interpret $ \case
   GetBankAccounts -> (^. bankAccounts) <$> getConfig
 
-runGetConfig :: (Members '[Trace, Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
+runGetConfig :: (Members '[Logger, Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
 runGetConfig fp = interpret $ \case
   Input -> do
-    trace $ "Loading config from " ++ fp
+    info $ "Loading config from " ++ fp
     ecfg <- embed $ eitherDecodeFileStrict fp
     case ecfg of
       Left e -> error e
       Right cfg -> return cfg
 
-runWriteConfig :: (Members '[Trace, Embed IO] r) => FilePath -> Sem (Output Config ': r) a -> Sem r a
+runWriteConfig :: (Members '[Logger, Embed IO] r) => FilePath -> Sem (Output Config ': r) a -> Sem r a
 runWriteConfig fp = interpret $ \case
   Output cfg -> do
-    trace $ "Writing config to " ++ fp
+    info $ "Writing config to " ++ fp
     embed $ S.writeFile fp (encode cfg)
 
 runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a

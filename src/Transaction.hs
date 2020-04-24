@@ -49,10 +49,9 @@ import Polysemy.Error
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
-import Polysemy.Trace
 import Token
 import Types
-import Prelude
+import Prelude hiding (log)
 
 newtype TransactionDate = TransactionDate Day deriving (Eq, Show, Generic, FromJSON)
 
@@ -122,7 +121,7 @@ latestTransaction tx = LastImported $ toDay . dated_on $ maximumBy (comparing (t
 runOutputOnCsv ::
   ( Members
       '[ Embed IO,
-         Trace
+         Logger
        ]
       r
   ) =>
@@ -131,7 +130,7 @@ runOutputOnCsv ::
   Sem r a
 runOutputOnCsv fp = interpret $ \case
   Output tx -> do
-    trace $ "Writing to " ++ fp
+    info $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
 
 $(makePrisms ''HttpException) -- req
@@ -160,7 +159,7 @@ runInputOnApi ::
   ( Members
       '[ LastImportedManager,
          ApiManager,
-         Trace
+         Logger
        ]
       r
   ) =>
@@ -172,7 +171,7 @@ runInputOnApi bankAccountId =
     ( \case
         Input -> do
           (LastImported fromDate) <- getLastImported
-          trace $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
+          info $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
           bank_transactions <$> getApiTransactions bankAccountId fromDate
     )
 
@@ -196,7 +195,7 @@ runApiManagerOnNetwork = interpret $ \case
 
 retryOnUnauthorized ::
   Members
-    '[ Trace,
+    '[ Logger,
        Input [Transaction],
        Input (Tagged Refresh TokenEndpoint),
        Error HttpException
@@ -214,7 +213,7 @@ retryOnUnauthorized =
                 if isUnauthorized e
                   then
                     ( do
-                        trace "Unauthorized"
+                        info "Unauthorized"
                         input @(Tagged Refresh TokenEndpoint)
                         input @[Transaction]
                     )
