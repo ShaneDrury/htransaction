@@ -11,6 +11,7 @@ where
 
 import App (app)
 import Config
+import Control.Lens
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import Data.Tagged
@@ -24,7 +25,6 @@ import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
 import Polysemy.State
-import Polysemy.Trace
 import Test.Hspec
 import Token
 import Transaction
@@ -58,8 +58,11 @@ runAppSimple transactions =
     . runOutputList @([Transaction])
     . runTransactionsManagerSimple transactions
 
-testTime :: Maybe UTCTime
-testTime = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2010-3-04"
+testTokenExpiresAt :: Maybe UTCTime
+testTokenExpiresAt = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2010-3-09"
+
+expiredTokenTime :: Maybe UTCTime
+expiredTokenTime = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2010-3-01"
 
 testCurrentTime :: UTCTime
 testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2010-3-04"
@@ -72,27 +75,27 @@ testConfig =
       _refreshToken = Just "refreshToken",
       _clientID = "clientID",
       _clientSecret = "secret",
-      _tokenExpiresAt = testTime
+      _tokenExpiresAt = testTokenExpiresAt
     }
 
 refreshTokenEndpoint :: Tagged Refresh TokenEndpoint
 refreshTokenEndpoint =
   Tagged @Refresh $
     TokenEndpoint
-      { access_token = "asdf",
+      { access_token = "accessTokenRefresh",
         token_type = "foo",
-        expires_in = 123,
-        refresh_token = Just "foo"
+        expires_in = 86400,
+        refresh_token = Just "refreshTokenRefresh"
       }
 
 accessTokenEndpoint :: Tagged AccessToken TokenEndpoint
 accessTokenEndpoint =
   Tagged @AccessToken $
     TokenEndpoint
-      { access_token = "asdf",
+      { access_token = "accessTokenAccess",
         token_type = "foo",
-        expires_in = 123,
-        refresh_token = Just "foo"
+        expires_in = 86400,
+        refresh_token = Just "refreshTokenAccess"
       }
 
 transactionsEndpoint :: [Transaction] -> TransactionsEndpoint
@@ -110,17 +113,19 @@ testTransactions =
       }
   ]
 
-runApiManager :: [Transaction] -> Sem (ApiManager : r) a -> Sem r a
+runApiManager :: Members '[Input ValidToken] r => [Transaction] -> Sem (ApiManager : r) a -> Sem r a
 runApiManager tx = interpret $ \case
-  GetApiTransactions _ _ -> return $ transactionsEndpoint tx
+  GetApiTransactions _ _ -> do
+    input @ValidToken
+    return $ transactionsEndpoint tx
 
-runAppDeep :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Input [Transaction], ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Output LogMsg, Error H.HttpException, Error AppError] a -> Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))
-runAppDeep tx =
+runAppDeep :: [Transaction] -> Config -> Sem '[TransactionsManager, Output [Transaction], Input [Transaction], ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Output LogMsg, Error H.HttpException, Error AppError] a -> Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))
+runAppDeep tx config =
   run
     . handleErrors
     . runOutputList @LogMsg
     . runLoggerAsOutput
-    . runInputConst testConfig
+    . runInputConst config
     . runOutputList @Config
     . runCached @Config
     . runConfigM
@@ -183,7 +188,7 @@ spec = do
                      )
     context "happy, deep path" $ do
       it "imports transactions, outputs them, updates config" $ do
-        case runAppDeep testTransactions app of
+        case runAppDeep testTransactions testConfig app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -200,7 +205,7 @@ spec = do
                            )
                          )
       it "imports 0 transactions" $ do
-        case runAppDeep [] app of
+        case runAppDeep [] testConfig app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -209,3 +214,26 @@ spec = do
                            ],
                            ([], ([[]], ()))
                          )
+      it "tries to refresh tokens if needed" $ do
+        case runAppDeep testTransactions (testConfig & tokenExpiresAt .~ expiredTokenTime) app of
+          Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
+          Right r ->
+            let updatedTokenConfig = testConfig &~ do
+                  token .= Just "accessTokenRefresh"
+                  refreshToken .= Just "refreshTokenRefresh"
+                  tokenExpiresAt .= Just ((addUTCTime (secondsToNominalDiffTime 86400)) $ testCurrentTime)
+                updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ (Map.singleton 1 (LastImported $ fromGregorian 2020 4 20))
+             in r
+                  `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
+                                 (Info, "Number of transactions: 1"),
+                                 (Info, "Outputting last imported day of LastImported 2020-04-20")
+                               ],
+                               ( [ updatedTokenConfig,
+                                   updatedLastImportConfig
+                                 ],
+                                 ( [ testTransactions
+                                   ],
+                                   ()
+                                 )
+                               )
+                             )

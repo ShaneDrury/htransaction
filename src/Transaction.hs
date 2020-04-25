@@ -191,7 +191,7 @@ runApiManagerOnNetwork = interpret $ \case
     result <- embed $ E.try (getTransactionsNetwork bankAccountId fromDate token)
     case result of
       Right r -> return r
-      Left err -> throw @HttpException err
+      Left err' -> throw @HttpException err'
 
 retryOnUnauthorized ::
   Members
