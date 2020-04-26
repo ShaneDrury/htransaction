@@ -113,15 +113,22 @@ testTransactions =
       }
   ]
 
-runApiManager :: Members '[Input ValidToken, Error H.HttpException] r => Maybe [Transaction] -> Sem (ApiManager : r) a -> Sem r a
-runApiManager mtx = interpret $ \case
-  GetApiTransactions _ _ -> do
-    input @ValidToken
-    case mtx of
-      Just tx -> return $ Right $ transactionsEndpoint tx
-      Nothing -> return $ Left Unauthorized
+runApiManager :: Members '[Input (Maybe (Maybe [Transaction])), Input ValidToken, Error H.HttpException] r => Sem (ApiManager : r) a -> Sem r a
+runApiManager =
+  interpret $
+    ( \case
+        GetApiTransactions _ _ -> do
+          input @ValidToken
+          mmtxs <- input @(Maybe (Maybe [Transaction]))
+          case mmtxs of
+            Just mtxs ->
+              case mtxs of
+                Just txs -> return $ Right $ transactionsEndpoint txs
+                Nothing -> (return $ Left Unauthorized)
+            Nothing -> error "huh"
+    )
 
-runAppDeep :: Maybe [Transaction] -> Config -> Sem '[TransactionsManager, Output [Transaction], Input (Either ApiError [Transaction]), ApiManager, LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Output LogMsg, Error H.HttpException, Error ApiError, Error AppError] a -> Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))
+runAppDeep :: [Maybe [Transaction]] -> Config -> Sem '[TransactionsManager, Output [Transaction], Input (Either ApiError [Transaction]), ApiManager, Input (Maybe (Maybe [Transaction])), LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Output LogMsg, Error H.HttpException, Error ApiError, Error AppError] a -> Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))
 runAppDeep tx config =
   run
     . handleErrors
@@ -142,7 +149,8 @@ runAppDeep tx config =
     . runSaveAccessTokens
     . runValidToken
     . runLastImportedManager
-    . runApiManager tx
+    . runInputList tx
+    . runApiManager
     . runInputOnApi 1
     . retryOnUnauthorized
     . runOutputList @([Transaction])
@@ -190,7 +198,7 @@ spec = do
                      )
     context "happy, deep path" $ do
       it "imports transactions, outputs them, updates config" $ do
-        case runAppDeep (Just testTransactions) testConfig app of
+        case runAppDeep [Just testTransactions] testConfig app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -207,7 +215,7 @@ spec = do
                            )
                          )
       it "imports 0 transactions" $ do
-        case runAppDeep (Just []) testConfig app of
+        case runAppDeep [Just []] testConfig app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -217,7 +225,7 @@ spec = do
                            ([], ([[]], ()))
                          )
       it "tries to refresh tokens if needed" $ do
-        case runAppDeep (Just testTransactions) (testConfig & tokenExpiresAt .~ expiredTokenTime) app of
+        case runAppDeep [Just testTransactions] (testConfig & tokenExpiresAt .~ expiredTokenTime) app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig = testConfig &~ do
@@ -227,6 +235,31 @@ spec = do
                 updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ (Map.singleton 1 (LastImported $ fromGregorian 2020 4 20))
              in r
                   `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
+                                 (Info, "Number of transactions: 1"),
+                                 (Info, "Outputting last imported day of LastImported 2020-04-20")
+                               ],
+                               ( [ updatedTokenConfig,
+                                   updatedLastImportConfig
+                                 ],
+                                 ( [ testTransactions
+                                   ],
+                                   ()
+                                 )
+                               )
+                             )
+      it "retries if unauthorized" $ do
+        case runAppDeep [Nothing, Just testTransactions] testConfig app of
+          Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
+          Right r ->
+            let updatedTokenConfig = testConfig &~ do
+                  token .= Just "accessTokenRefresh"
+                  refreshToken .= Just "refreshTokenRefresh"
+                  tokenExpiresAt .= Just ((addUTCTime (secondsToNominalDiffTime 86400)) $ testCurrentTime)
+                updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ (Map.singleton 1 (LastImported $ fromGregorian 2020 4 20))
+             in r
+                  `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
+                                 (LogError, "Unauthorized"),
+                                 (Info, "Getting transactions from 1 after 2020-04-19"),
                                  (Info, "Number of transactions: 1"),
                                  (Info, "Outputting last imported day of LastImported 2020-04-20")
                                ],
