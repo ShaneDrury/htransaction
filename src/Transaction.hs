@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
@@ -79,15 +80,20 @@ makeSem ''TransactionsManager
 
 runTransactionsManager ::
   ( Members
-      '[ Input [Transaction],
-         Output [Transaction]
+      '[ Input (Either ApiError [Transaction]),
+         Output [Transaction],
+         Error ApiError
        ]
       r
   ) =>
   Sem (TransactionsManager : r) a ->
   Sem r a
 runTransactionsManager = interpret $ \case
-  GetTransactions -> input @[Transaction]
+  GetTransactions -> do
+    etx <- input @(Either ApiError [Transaction])
+    case etx of
+      Right r -> return r
+      Left e -> throw e
   OutputTransactions tx -> output tx
 
 newtype TransactionsEndpoint
@@ -96,24 +102,22 @@ newtype TransactionsEndpoint
       }
   deriving (Eq, Generic, Show, FromJSON)
 
-getTransactionsNetwork :: Int -> Day -> ValidToken -> IO TransactionsEndpoint
-getTransactionsNetwork bankAccountId day (ValidToken token) = runReq defaultHttpConfig $ do
-  r <-
-    req
-      GET
-      (https "api.freeagent.com" /: "v2" /: "bank_transactions")
-      NoReqBody
-      jsonResponse
-      ( "bank_account" =: bankAccountId
-          <> "from_date" =: day
-          <> "sort" =: ("dated_on" :: Text)
-          <> "per_page" =: (100 :: Int)
-          <> oAuth2Bearer token
-          <> header
-            "User-Agent"
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
-      )
-  return (responseBody r :: TransactionsEndpoint)
+getTransactionsNetwork :: (MonadHttp m, FromJSON a) => Int -> Day -> ValidToken -> m (JsonResponse a)
+getTransactionsNetwork bankAccountId day (ValidToken token) = do
+  req
+    GET
+    (https "api.freeagent.com" /: "v2" /: "bank_transactions")
+    NoReqBody
+    jsonResponse
+    ( "bank_account" =: bankAccountId
+        <> "from_date" =: day
+        <> "sort" =: ("dated_on" :: Text)
+        <> "per_page" =: (100 :: Int)
+        <> oAuth2Bearer token
+        <> header
+          "User-Agent"
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
+    )
 
 latestTransaction :: [Transaction] -> LastImported
 latestTransaction tx = LastImported $ toDay . dated_on $ maximumBy (comparing (toDay . dated_on)) tx
@@ -145,13 +149,16 @@ responseP = _VanillaHttpException . _HttpExceptionRequest . _2 . _StatusCodeExce
 statusP :: HttpException -> Maybe Status.Status
 statusP e = H.responseStatus <$> e ^? responseP
 
+foo :: (H.Request, H.HttpExceptionContent) -> HttpException
+foo x = review (_VanillaHttpException . _HttpExceptionRequest) x
+
 isUnauthorized :: HttpException -> Bool
 isUnauthorized e = case statusP e of
   Just status -> status == Status.unauthorized401
   Nothing -> False
 
 data ApiManager m a where
-  GetApiTransactions :: Int -> Day -> ApiManager m TransactionsEndpoint
+  GetApiTransactions :: Int -> Day -> ApiManager m (Either ApiError TransactionsEndpoint)
 
 $(makeSem ''ApiManager)
 
@@ -164,15 +171,16 @@ runInputOnApi ::
       r
   ) =>
   Int ->
-  Sem (Input [Transaction] : r) a ->
+  Sem (Input (Either ApiError [Transaction]) : r) a ->
   Sem r a
 runInputOnApi bankAccountId =
-  interpret @(Input [Transaction])
+  interpret @(Input (Either ApiError [Transaction]))
     ( \case
         Input -> do
           (LastImported fromDate) <- getLastImported
           info $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
-          bank_transactions <$> getApiTransactions bankAccountId fromDate
+          r <- getApiTransactions bankAccountId fromDate
+          return $ bank_transactions <$> r
     )
 
 runApiManagerOnNetwork ::
@@ -188,15 +196,24 @@ runApiManagerOnNetwork ::
 runApiManagerOnNetwork = interpret $ \case
   GetApiTransactions bankAccountId fromDate -> do
     token <- input @ValidToken
-    result <- embed $ E.try (getTransactionsNetwork bankAccountId fromDate token)
+    result <- embed $ E.try $ do
+      r <- runReq defaultHttpConfig $ getTransactionsNetwork bankAccountId fromDate token
+      return (responseBody $ r :: TransactionsEndpoint)
     case result of
-      Right r -> return r
-      Left err' -> throw @HttpException err'
+      Right r -> return $ Right r
+      Left err' ->
+        if isUnauthorized err'
+          then return $ Left Unauthorized
+          else throw @HttpException err'
+
+-- TODO: At this point, check result is unauthed
+-- throw specific Unauthed error, or Either it.
+-- possibly can get rid of apperror, as it would only cover H.HttpException
 
 retryOnUnauthorized ::
   Members
     '[ Logger,
-       Input [Transaction],
+       Input (Either ApiError [Transaction]),
        Input (Tagged Refresh TokenEndpoint),
        Error HttpException
      ]
@@ -204,19 +221,14 @@ retryOnUnauthorized ::
   Sem r a ->
   Sem r a
 retryOnUnauthorized =
-  intercept @(Input [Transaction])
+  intercept @(Input (Either ApiError [Transaction]))
     ( \case
-        Input ->
-          catch @HttpException
-            input
-            ( \e ->
-                if isUnauthorized e
-                  then
-                    ( do
-                        err "Unauthorized"
-                        input @(Tagged Refresh TokenEndpoint)
-                        input @[Transaction]
-                    )
-                  else throw e
-            )
+        Input -> do
+          r <- input @(Either ApiError [Transaction])
+          case r of
+            Left Unauthorized -> do
+              err "Unauthorized"
+              input @(Tagged Refresh TokenEndpoint)
+              input @(Either ApiError [Transaction])
+            s -> return s
     )

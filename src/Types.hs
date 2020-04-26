@@ -20,6 +20,7 @@ module Types
     warn,
     err,
     LogType (..),
+    ApiError (..),
   )
 where
 
@@ -39,17 +40,21 @@ import Prelude hiding (log)
 
 newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
+data ApiError = Unauthorized deriving stock (Eq, Show)
+
 runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Trace ': r) a -> Sem r a
 runOutputOnLog verbose = interpret $ \case
   Trace msg -> embed $ when verbose (putStrLn msg)
 
-newtype AppError
+data AppError
   = HttpError H.HttpException
+  | AppApiError ApiError
   deriving (Show)
 
-handleErrors :: Sem (Error H.HttpException : Error AppError : r) a -> Sem r (Either AppError a)
+handleErrors :: Sem (Error H.HttpException : Error ApiError : Error AppError : r) a -> Sem r (Either AppError a)
 handleErrors =
   runError @AppError
+    . mapError AppApiError
     . mapError HttpError
 
 data LogType = Info | Warning | LogError deriving stock (Eq, Show)
