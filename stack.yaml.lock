@@ -18,6 +18,20 @@ packages:
       sha256: 4b16989344380c912e476dc232cc58264837b498e31a8bf16a17092ba6c1cfb9
   original:
     hackage: ghc-tcplugins-extra-0.3.2@sha256:1bbfd4449c3669a31618ea0ebc5d00d980a53988daad3b6218bab5c8cdff268d,1687
+- completed:
+    size: 64574
+    url: https://github.com/mpickering/apply-refact/archive/1acf7eb860be5a446828a3a2fe3644aeb5a1b55f.tar.gz
+    cabal-file:
+      size: 3285
+      sha256: 448b0cb15a3b0be697f556a9f42b7fd1bb48543864330d163d48471ba9252b0e
+    name: apply-refact
+    version: 0.6.0.0
+    sha256: b91f7011e7bf33f96b90cede66db17a9ded48379c99344667fa0659a3a0df416
+    pantry-tree:
+      size: 91839
+      sha256: caa80b78125978d15e794991bd176128a69c495f763830a4311d4e5617a5189c
+  original:
+    url: https://github.com/mpickering/apply-refact/archive/1acf7eb860be5a446828a3a2fe3644aeb5a1b55f.tar.gz
 snapshots:
 - completed:
     size: 499083
