@@ -149,9 +149,6 @@ responseP = _VanillaHttpException . _HttpExceptionRequest . _2 . _StatusCodeExce
 statusP :: HttpException -> Maybe Status.Status
 statusP e = H.responseStatus <$> e ^? responseP
 
-foo :: (H.Request, H.HttpExceptionContent) -> HttpException
-foo x = review (_VanillaHttpException . _HttpExceptionRequest) x
-
 isUnauthorized :: HttpException -> Bool
 isUnauthorized e = case statusP e of
   Just status -> status == Status.unauthorized401

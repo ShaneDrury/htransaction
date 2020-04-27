@@ -12,6 +12,7 @@ where
 import App (app)
 import Config
 import Control.Lens
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import Data.Tagged
@@ -59,13 +60,13 @@ runAppSimple transactions =
     . runTransactionsManagerSimple transactions
 
 testTokenExpiresAt :: Maybe UTCTime
-testTokenExpiresAt = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2010-3-09"
+testTokenExpiresAt = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-09"
 
 expiredTokenTime :: Maybe UTCTime
-expiredTokenTime = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2010-3-01"
+expiredTokenTime = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-01"
 
 testCurrentTime :: UTCTime
-testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2010-3-04"
+testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-04"
 
 testConfig :: Config
 testConfig =
@@ -158,6 +159,27 @@ runAppDeep tx config =
 
 spec :: Spec
 spec = do
+  describe "runValidToken" $ do
+    let tokenApp :: (Members '[Input ValidToken] r) => Sem r ValidToken
+        tokenApp = input @ValidToken
+    context "happy path" $ do
+      let happyRunner :: Config -> Sem '[Input ValidToken, ConfigM, Input Config, Input UTCTime, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
+          happyRunner config =
+            run
+              . runInputConst accessTokenEndpoint
+              . runInputConst refreshTokenEndpoint
+              . runInputConst testCurrentTime
+              . runInputConst config
+              . runConfigM
+              . runValidToken
+      it "uses the config token if not expired" $
+        (happyRunner testConfig tokenApp) `shouldBe` (ValidToken $ BS.pack "token")
+      it "uses the refresh token if expired" $
+        (happyRunner (testConfig & tokenExpiresAt .~ expiredTokenTime) tokenApp) `shouldBe` (ValidToken $ BS.pack "accessTokenRefresh")
+      it "uses the access token if tokenExpiresAt is not set" $
+        (happyRunner (testConfig & tokenExpiresAt .~ Nothing) tokenApp) `shouldBe` (ValidToken $ BS.pack "accessTokenAccess")
+      it "uses the access token if token not present in config" $
+        (happyRunner (testConfig & token .~ Nothing) tokenApp) `shouldBe` (ValidToken $ BS.pack "accessTokenAccess")
   describe "app" $ do
     context "empty path" $ do
       it "imports nothing" $ do

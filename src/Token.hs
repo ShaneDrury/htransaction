@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
@@ -43,7 +44,7 @@ import Polysemy.Output
 import Types
 import Prelude
 
-newtype ValidToken = ValidToken BS.ByteString
+newtype ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
 
 data InvalidToken = InvalidToken
 
@@ -126,14 +127,14 @@ runValidToken = interpret $ \case
     config <- getConfig
     case config ^. token of
       Just t -> do
-        _ <- case config ^. tokenExpiresAt of
+        newToken <- case config ^. tokenExpiresAt of
           Just expires -> do
             currentTime <- input
             if expires <= currentTime
               then toValidToken <$> input @(Tagged Refresh TokenEndpoint)
               else return $ ValidToken $ BS.pack t
           Nothing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
-        return $ ValidToken $ BS.pack t
+        return newToken
       Nothing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
 
 runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
