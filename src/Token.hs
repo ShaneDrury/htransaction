@@ -13,14 +13,12 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Token
-  ( ValidToken (..),
-    runValidToken,
+  ( runValidToken,
     runUseRefreshTokens,
     runSaveRefreshTokens,
     runSaveAccessTokens,
     runGetAccessTokens,
     runGetTime,
-    InvalidToken (..),
     Refresh,
     AccessToken,
     TokenEndpoint (..),
@@ -43,10 +41,6 @@ import Polysemy.Input
 import Polysemy.Output
 import Types
 import Prelude
-
-newtype ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
-
-data InvalidToken = InvalidToken
 
 data Refresh
 
@@ -125,17 +119,11 @@ runValidToken :: (Members '[ConfigM, Input UTCTime, Input (Tagged AccessToken To
 runValidToken = interpret $ \case
   Input -> do
     config <- getConfig
-    case config ^. token of
-      Just t -> do
-        newToken <- case config ^. tokenExpiresAt of
-          Just expires -> do
-            currentTime <- input
-            if expires <= currentTime
-              then toValidToken <$> input @(Tagged Refresh TokenEndpoint)
-              else return $ ValidToken $ BS.pack t
-          Nothing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
-        return newToken
-      Nothing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
+    currentTime <- input
+    case configToken config currentTime of
+      Left (InvalidToken Missing) -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
+      Left (InvalidToken Expired) -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
+      Right validToken -> return validToken
 
 runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
 runUseRefreshTokens = interpret $ \case

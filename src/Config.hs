@@ -15,12 +15,14 @@ module Config
     updateConfig,
     bankAccounts,
     BankAccounts,
+    configToken,
   )
 where
 
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map as Map
 import Data.Time
 import GHC.Generics
@@ -46,3 +48,16 @@ $(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
 
 updateConfig :: Int -> LastImported -> Config -> Config
 updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
+
+configToken :: Config -> UTCTime -> Either InvalidToken ValidToken
+configToken config currentTime =
+  case config ^. token of
+    Just t ->
+      ( case config ^. tokenExpiresAt of
+          Just expires -> do
+            if expires <= currentTime
+              then Left $ InvalidToken Expired
+              else Right $ ValidToken $ BS.pack t
+          Nothing -> Left $ InvalidToken Missing
+      )
+    Nothing -> Left $ InvalidToken Missing

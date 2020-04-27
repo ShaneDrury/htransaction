@@ -21,12 +21,16 @@ module Types
     err,
     LogType (..),
     ApiError (..),
+    InvalidToken (..),
+    ValidToken (..),
+    InvalidTokenReason (..),
   )
 where
 
 import Colog.Polysemy.Effect
 import Control.Monad
 import Data.Aeson
+import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 import Data.Time
 import GHC.Generics
@@ -41,6 +45,12 @@ import Prelude hiding (log)
 newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
 data ApiError = Unauthorized deriving stock (Eq, Show)
+
+newtype ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
+
+data InvalidTokenReason = Expired | Missing deriving (Eq, Show)
+
+data InvalidToken = InvalidToken InvalidTokenReason
 
 runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Trace ': r) a -> Sem r a
 runOutputOnLog verbose = interpret $ \case
