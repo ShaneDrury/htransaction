@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -86,8 +87,7 @@ runTransactionsManager ::
        ]
       r
   ) =>
-  Sem (TransactionsManager : r) a ->
-  Sem r a
+  InterpreterFor TransactionsManager r
 runTransactionsManager = interpret $ \case
   GetTransactions -> do
     etx <- input @(Either ApiError [Transaction])
@@ -130,8 +130,7 @@ runOutputOnCsv ::
       r
   ) =>
   FilePath ->
-  Sem (Output [Transaction] ': r) a ->
-  Sem r a
+  InterpreterFor (Output [Transaction]) r
 runOutputOnCsv fp = interpret $ \case
   Output tx -> do
     info $ "Writing to " ++ fp
@@ -168,8 +167,7 @@ runInputOnApi ::
       r
   ) =>
   Int ->
-  Sem (Input (Either ApiError [Transaction]) : r) a ->
-  Sem r a
+  InterpreterFor (Input (Either ApiError [Transaction])) r
 runInputOnApi bankAccountId =
   interpret @(Input (Either ApiError [Transaction]))
     ( \case
@@ -188,8 +186,7 @@ runApiManagerOnNetwork ::
        ]
       r
   ) =>
-  Sem (ApiManager : r) a ->
-  Sem r a
+  InterpreterFor ApiManager r
 runApiManagerOnNetwork = interpret $ \case
   GetApiTransactions bankAccountId fromDate -> do
     token <- input @ValidToken

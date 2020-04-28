@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -36,15 +37,15 @@ data LastImportedManager m a where
 
 $(makeSem ''LastImportedManager)
 
-runLastImportedManager :: (Members '[Input LastImported] r) => Sem (LastImportedManager : r) a -> Sem r a
+runLastImportedManager :: (Members '[Input LastImported] r) => InterpreterFor LastImportedManager r
 runLastImportedManager = interpret $ \case
   GetLastImported -> input @LastImported
 
-runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => InterpreterFor (Output LastImported) r
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Output Config, Logger] r) => Int -> Sem (Output LastImported ': r) a -> Sem r a
+runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Output Config, Logger] r) => Int -> InterpreterFor (Output LastImported) r
 runOutputLastImportedOnFile bankAccountId = interpret $ \case
   Output day -> do
     originalConfig <- getConfig
@@ -53,7 +54,7 @@ runOutputLastImportedOnFile bankAccountId = interpret $ \case
       info $ "Outputting last imported day of " ++ show day
       output (updateConfig bankAccountId day originalConfig)
 
-runGetLastImported :: (Members '[BankAccountsM] r) => Int -> Sem (Input LastImported ': r) a -> Sem r a
+runGetLastImported :: (Members '[BankAccountsM] r) => Int -> InterpreterFor (Input LastImported) r
 runGetLastImported bankAccountId = interpret $ \case
   Input -> do
     bankAccounts <- getBankAccounts

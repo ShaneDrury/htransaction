@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
@@ -32,12 +33,12 @@ import Transaction
 import Types
 import Prelude
 
-runTransactionsManagerEmpty :: Sem (TransactionsManager : r) a -> Sem r a
+runTransactionsManagerEmpty :: InterpreterFor TransactionsManager r
 runTransactionsManagerEmpty = interpret $ \case
   GetTransactions -> return []
   OutputTransactions _ -> return ()
 
-runTransactionsManagerSimple :: (Members '[Output [Transaction]] r) => [Transaction] -> Sem (TransactionsManager : r) a -> Sem r a
+runTransactionsManagerSimple :: (Members '[Output [Transaction]] r) => [Transaction] -> InterpreterFor TransactionsManager r
 runTransactionsManagerSimple txs = interpret $ \case
   GetTransactions -> return txs
   OutputTransactions tx -> output tx
@@ -114,7 +115,7 @@ testTransactions =
       }
   ]
 
-runApiManager :: Members '[Input (Maybe (Maybe [Transaction])), Input ValidToken, Error H.HttpException] r => Sem (ApiManager : r) a -> Sem r a
+runApiManager :: Members '[Input (Maybe (Maybe [Transaction])), Input ValidToken, Error H.HttpException] r => InterpreterFor ApiManager r
 runApiManager =
   interpret
     ( \case
@@ -126,7 +127,7 @@ runApiManager =
               case mtxs of
                 Just txs -> return $ Right $ transactionsEndpoint txs
                 Nothing -> return $ Left Unauthorized
-            Nothing -> error "huh"
+            Nothing -> return $ Right $ transactionsEndpoint []
     )
 
 runAppDeep :: [Maybe [Transaction]] -> Config -> Sem '[TransactionsManager, Output [Transaction], Input (Either ApiError [Transaction]), ApiManager, Input (Maybe (Maybe [Transaction])), LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Output LogMsg, Error H.HttpException, Error ApiError, Error AppError] a -> Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))

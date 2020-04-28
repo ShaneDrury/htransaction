@@ -21,7 +21,7 @@ import Prelude
 
 data Cached a = Cached a | Dirty deriving (Eq, Show)
 
-runCached :: forall v a r. (Eq v, Members '[Input v, Output v] r) => Sem (State (Cached v) : r) a -> Sem r a
+runCached :: forall v r. (Eq v, Members '[Input v, Output v] r) => InterpreterFor (State (Cached v)) r
 runCached =
   evalState Dirty
     . intercept @(Input v)

@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -52,7 +53,7 @@ data InvalidTokenReason = Expired | Missing deriving (Eq, Show)
 
 data InvalidToken = InvalidToken InvalidTokenReason
 
-runOutputOnLog :: (Members '[Embed IO] r) => Bool -> Sem (Trace ': r) a -> Sem r a
+runOutputOnLog :: (Members '[Embed IO] r) => Bool -> InterpreterFor Trace r
 runOutputOnLog verbose = interpret $ \case
   Trace msg -> embed $ when verbose (putStrLn msg)
 
@@ -82,7 +83,7 @@ warn s = log (Warning, s)
 err :: Members '[Logger] r => String -> Sem r ()
 err s = log (LogError, s)
 
-runLoggerOnRainbow :: (Members '[Embed IO] r) => Sem (Log LogMsg ': r) a -> Sem r a
+runLoggerOnRainbow :: (Members '[Embed IO] r) => InterpreterFor (Log LogMsg) r
 runLoggerOnRainbow =
   interpret
     ( \(Log (logType, s)) -> case logType of
@@ -93,7 +94,7 @@ runLoggerOnRainbow =
   where
     msg = chunk . T.pack
 
-runLoggerAsOutput :: (Members '[Output LogMsg] r) => Sem (Log LogMsg ': r) a -> Sem r a
+runLoggerAsOutput :: (Members '[Output LogMsg] r) => InterpreterFor (Log LogMsg) r
 runLoggerAsOutput =
   interpret
     ( \(Log logmsg) -> output logmsg

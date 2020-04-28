@@ -115,7 +115,7 @@ authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=
 toValidToken :: Tagged b TokenEndpoint -> ValidToken
 toValidToken tagged = ValidToken $ BS.pack $ access_token (unTagged tagged)
 
-runValidToken :: (Members '[ConfigM, Input UTCTime, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => Sem (Input ValidToken ': r) a -> Sem r a
+runValidToken :: (Members '[ConfigM, Input UTCTime, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => InterpreterFor (Input ValidToken) r
 runValidToken = interpret $ \case
   Input -> do
     config <- getConfig
@@ -125,14 +125,14 @@ runValidToken = interpret $ \case
       Left (InvalidToken Expired) -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
       Right validToken -> return validToken
 
-runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => Sem (Input (Tagged Refresh TokenEndpoint) ': r) a -> Sem r a
+runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => InterpreterFor (Input (Tagged Refresh TokenEndpoint)) r
 runUseRefreshTokens = interpret $ \case
   Input -> do
     config <- getConfig
     warn "Trying to refresh tokens"
     embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
 
-runGetTime :: (Members '[Embed IO] r) => Sem (Input UTCTime : r) a -> Sem r a
+runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
@@ -156,7 +156,7 @@ runSaveAccessTokens = intercept @(Input (Tagged AccessToken TokenEndpoint)) $ \c
     output (withNewTokens tokens originalConfig currentTime)
     return taggedTokens
 
-runGetAccessTokens :: (Members '[Embed IO, ConfigM] r) => Sem (Input (Tagged AccessToken TokenEndpoint) ': r) a -> Sem r a
+runGetAccessTokens :: (Members '[Embed IO, ConfigM] r) => InterpreterFor (Input (Tagged AccessToken TokenEndpoint)) r
 runGetAccessTokens = interpret $ \case
   Input -> do
     config <- getConfig

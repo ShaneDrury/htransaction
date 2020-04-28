@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -43,7 +44,7 @@ data ConfigM m a where
 
 $(makeSem ''ConfigM)
 
-runConfigM :: (Members '[Input Config] r) => Sem (ConfigM : r) a -> Sem r a
+runConfigM :: (Members '[Input Config] r) => InterpreterFor ConfigM r
 runConfigM = interpret $ \case
   GetConfig -> input @Config
 
@@ -52,11 +53,11 @@ data BankAccountsM m a where
 
 $(makeSem ''BankAccountsM)
 
-runBankAccountsMOnConfig :: (Members '[ConfigM] r) => Sem (BankAccountsM : r) a -> Sem r a
+runBankAccountsMOnConfig :: (Members '[ConfigM] r) => InterpreterFor BankAccountsM r
 runBankAccountsMOnConfig = interpret $ \case
   GetBankAccounts -> (^. bankAccounts) <$> getConfig
 
-runGetConfig :: (Members '[Logger, Embed IO] r) => FilePath -> Sem (Input Config ': r) a -> Sem r a
+runGetConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Input Config) r
 runGetConfig fp = interpret $ \case
   Input -> do
     info $ "Loading config from " ++ fp
@@ -65,13 +66,13 @@ runGetConfig fp = interpret $ \case
       Left e -> error e
       Right cfg -> return cfg
 
-runWriteConfig :: (Members '[Logger, Embed IO] r) => FilePath -> Sem (Output Config ': r) a -> Sem r a
+runWriteConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Output Config) r
 runWriteConfig fp = interpret $ \case
   Output cfg -> do
     info $ "Writing config to " ++ fp
     embed $ S.writeFile fp (encode cfg)
 
-runGetConfigTest :: Sem (Input Config ': r) a -> Sem r a
+runGetConfigTest :: InterpreterFor (Input Config) r
 runGetConfigTest = interpret $ \case
   Input ->
     return $
