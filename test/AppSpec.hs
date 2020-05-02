@@ -136,7 +136,6 @@ runAppDeep ::
     '[ TransactionsManager,
        Input (Maybe (Maybe [Transaction])),
        Input (Tagged AccessToken TokenEndpoint),
-       Input UTCTime,
        Input (Tagged Refresh TokenEndpoint),
        Output LastImported,
        LastImportedManager,
@@ -162,11 +161,11 @@ runAppDeep tx config =
     . runLastImportedManager
     . runOutputLastImportedOnFile 1
     . runInputConst refreshTokenEndpoint
+    . runInputConst accessTokenEndpoint
+    . runInputList tx
     . runInputConst testCurrentTime
     . runSaveRefreshTokens
-    . runInputConst accessTokenEndpoint
     . runSaveAccessTokens
-    . runInputList tx
     . runValidToken
     . runApiManager
     . runInputOnApi 1
@@ -180,15 +179,15 @@ spec = do
     let tokenApp :: (Members '[Input ValidToken] r) => Sem r ValidToken
         tokenApp = input @ValidToken
     context "happy path" $ do
-      let happyRunner :: Config -> Sem '[Input ValidToken, ConfigM, Input Config, Input UTCTime, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
+      let happyRunner :: Config -> Sem '[Input ValidToken, ConfigM, Input Config, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
           happyRunner config =
             run
               . runInputConst accessTokenEndpoint
               . runInputConst refreshTokenEndpoint
-              . runInputConst testCurrentTime
               . runInputConst config
               . evalState config
               . runConfigM
+              . runInputConst testCurrentTime
               . runValidToken
       it "uses the config token if not expired" $
         happyRunner testConfig tokenApp `shouldBe` ValidToken (BS.pack "token")

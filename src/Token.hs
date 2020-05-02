@@ -115,8 +115,8 @@ authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=
 toValidToken :: Tagged b TokenEndpoint -> ValidToken
 toValidToken tagged = ValidToken $ BS.pack $ access_token (unTagged tagged)
 
-runValidToken :: (Members '[ConfigM, Input UTCTime, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => InterpreterFor (Input ValidToken) r
-runValidToken = interpret $ \case
+runValidToken :: (Members '[ConfigM, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => Sem (Input ValidToken : r) a -> Sem (Input UTCTime : r) a
+runValidToken = reinterpret $ \case
   Input -> do
     config <- getConfig
     currentTime <- input
