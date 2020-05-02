@@ -51,8 +51,8 @@ data ConfigM m a where
 
 $(makeSem ''ConfigM)
 
-runConfigM :: (Members '[State Config] r) => InterpreterFor ConfigM r
-runConfigM = interpret $ \case
+runConfigM :: Sem (ConfigM : r) a -> Sem (State Config : r) a
+runConfigM = reinterpret $ \case
   GetConfig -> get @Config
   WriteConfig s -> put @Config s
 

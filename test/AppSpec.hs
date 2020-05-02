@@ -145,7 +145,6 @@ runAppDeep ::
        Output LastImported,
        LastImportedManager,
        ConfigM,
-       State Config,
        Output Config,
        Input Config,
        Logger,
@@ -188,7 +187,7 @@ spec = do
     let tokenApp :: (Members '[Input ValidToken] r) => Sem r ValidToken
         tokenApp = input @ValidToken
     context "happy path" $ do
-      let happyRunner :: Config -> Sem '[Input ValidToken, ConfigM, State Config, Input Config, Input UTCTime, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
+      let happyRunner :: Config -> Sem '[Input ValidToken, ConfigM, Input Config, Input UTCTime, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
           happyRunner config =
             run
               . runInputConst accessTokenEndpoint
