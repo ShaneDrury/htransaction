@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -11,6 +12,7 @@ import App
 import Cli
 import Control.Monad
 import Polysemy
+import Config
 import Polysemy.Config
 import Polysemy.LastImported
 import Token
@@ -27,7 +29,7 @@ runapp Args {..} =
     . runWriteConfig configFile
     . runOutputOnCsv outfile
     . runGetTime
-    . runStateCached
+    . runStateCached @Config
     . runConfigM
     . runBankAccountsMOnConfig
     . runUseRefreshTokens

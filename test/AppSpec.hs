@@ -167,7 +167,7 @@ runAppDeep tx config =
     . runLoggerAsOutput
     . runInputConst config
     . runOutputList @Config
-    . runStateCached
+    . runStateCached @Config
     . runConfigM
     . runBankAccountsMOnConfig
     . runGetLastImported 1
