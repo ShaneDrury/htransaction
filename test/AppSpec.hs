@@ -134,9 +134,6 @@ runAppDeep ::
   Config ->
   Sem
     '[ TransactionsManager,
-       Output [Transaction],
-       Input (Either ApiError [Transaction]),
-       ApiManager,
        Input (Maybe (Maybe [Transaction])),
        Input ValidToken,
        Input (Tagged AccessToken TokenEndpoint),

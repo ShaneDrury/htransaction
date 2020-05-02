@@ -77,18 +77,15 @@ data TransactionsManager m a where
 
 makeSem ''TransactionsManager
 
--- TODO: Maybe eliminate Input [Transaction]
-
 runTransactionsManager ::
   ( Members
-      '[ Input (Either ApiError [Transaction]),
-         Output [Transaction],
-         Error ApiError
+      '[ Error ApiError
        ]
       r
   ) =>
-  InterpreterFor TransactionsManager r
-runTransactionsManager = interpret $ \case
+  Sem (TransactionsManager : r) a ->
+  Sem (Output [Transaction] : Input (Either ApiError [Transaction]) : r) a
+runTransactionsManager = reinterpret2 $ \case
   GetTransactions -> do
     etx <- input @(Either ApiError [Transaction])
     case etx of
@@ -161,15 +158,15 @@ $(makeSem ''ApiManager)
 runInputOnApi ::
   ( Members
       '[ LastImportedManager,
-         ApiManager,
          Logger
        ]
       r
   ) =>
   Int ->
-  InterpreterFor (Input (Either ApiError [Transaction])) r
+  Sem (Input (Either ApiError [Transaction]) : r) a ->
+  Sem (ApiManager : r) a
 runInputOnApi bankAccountId =
-  interpret @(Input (Either ApiError [Transaction]))
+  reinterpret @(Input (Either ApiError [Transaction]))
     ( \case
         Input -> do
           (LastImported fromDate) <- getLastImported

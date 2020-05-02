@@ -27,7 +27,6 @@ runapp Args {..} =
     . runLoggerOnRainbow
     . runGetConfig configFile
     . runWriteConfig configFile
-    . runOutputOnCsv outfile
     . runGetTime
     . runStateCached @Config
     . runConfigM
@@ -43,6 +42,7 @@ runapp Args {..} =
     . runApiManagerOnNetwork
     . runInputOnApi bankAccountId
     . retryOnUnauthorized
+    . runOutputOnCsv outfile
     . runTransactionsManager
 
 main :: IO ()
