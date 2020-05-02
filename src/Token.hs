@@ -136,24 +136,24 @@ runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
-runSaveRefreshTokens :: (Members '[Input UTCTime, ConfigM, Output Config, Input (Tagged Refresh TokenEndpoint)] r) => Sem r a -> Sem r a
+runSaveRefreshTokens :: (Members '[Input UTCTime, ConfigM, Input (Tagged Refresh TokenEndpoint)] r) => Sem r a -> Sem r a
 runSaveRefreshTokens = intercept @(Input (Tagged Refresh TokenEndpoint)) $ \case
   Input -> do
     taggedTokens <- input @(Tagged Refresh TokenEndpoint)
     let tokens = unTagged taggedTokens
     originalConfig <- getConfig
     currentTime <- input
-    output (withNewTokens tokens originalConfig currentTime)
+    writeConfig (withNewTokens tokens originalConfig currentTime)
     return taggedTokens
 
-runSaveAccessTokens :: (Members '[Input UTCTime, ConfigM, Output Config, Input (Tagged AccessToken TokenEndpoint)] r) => Sem r a -> Sem r a
+runSaveAccessTokens :: (Members '[Input UTCTime, ConfigM, Input (Tagged AccessToken TokenEndpoint)] r) => Sem r a -> Sem r a
 runSaveAccessTokens = intercept @(Input (Tagged AccessToken TokenEndpoint)) $ \case
   Input -> do
     taggedTokens <- input @(Tagged AccessToken TokenEndpoint)
     let tokens = unTagged taggedTokens
     originalConfig <- getConfig
     currentTime <- input
-    output (withNewTokens tokens originalConfig currentTime)
+    writeConfig (withNewTokens tokens originalConfig currentTime)
     return taggedTokens
 
 runGetAccessTokens :: (Members '[Embed IO, ConfigM] r) => InterpreterFor (Input (Tagged AccessToken TokenEndpoint)) r

@@ -1,7 +1,7 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -20,7 +20,6 @@ import Data.Tagged
 import Data.Time
 import qualified Network.HTTP.Req as H
 import Polysemy
-import Polysemy.Cached
 import Polysemy.Config
 import Polysemy.Error
 import Polysemy.Input
@@ -130,7 +129,37 @@ runApiManager =
             Nothing -> return $ Right $ transactionsEndpoint []
     )
 
-runAppDeep :: [Maybe [Transaction]] -> Config -> Sem '[TransactionsManager, Output [Transaction], Input (Either ApiError [Transaction]), ApiManager, Input (Maybe (Maybe [Transaction])), LastImportedManager, Input ValidToken, Input (Tagged AccessToken TokenEndpoint), Input UTCTime, Input (Tagged Refresh TokenEndpoint), Output LastImported, LastImportedManager, Input LastImported, BankAccountsM, ConfigM, State (Cached Config), Output Config, Input Config, Logger, Output LogMsg, Error H.HttpException, Error ApiError, Error AppError] a -> Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))
+runAppDeep ::
+  [Maybe [Transaction]] ->
+  Config ->
+  Sem
+    '[ TransactionsManager,
+       Output [Transaction],
+       Input (Either ApiError [Transaction]),
+       ApiManager,
+       Input (Maybe (Maybe [Transaction])),
+       LastImportedManager,
+       Input ValidToken,
+       Input (Tagged AccessToken TokenEndpoint),
+       Input UTCTime,
+       Input (Tagged Refresh TokenEndpoint),
+       Output LastImported,
+       LastImportedManager,
+       Input LastImported,
+       BankAccountsM,
+       ConfigM,
+       State Config,
+       State (Cached Config),
+       Output Config,
+       Input Config,
+       Logger,
+       Output LogMsg,
+       Error H.HttpException,
+       Error ApiError,
+       Error AppError
+     ]
+    a ->
+  Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))
 runAppDeep tx config =
   run
     . handleErrors
@@ -138,7 +167,8 @@ runAppDeep tx config =
     . runLoggerAsOutput
     . runInputConst config
     . runOutputList @Config
-    . runCached @Config
+    . evalState Dirty
+    . runStateCached
     . runConfigM
     . runBankAccountsMOnConfig
     . runGetLastImported 1
@@ -164,13 +194,14 @@ spec = do
     let tokenApp :: (Members '[Input ValidToken] r) => Sem r ValidToken
         tokenApp = input @ValidToken
     context "happy path" $ do
-      let happyRunner :: Config -> Sem '[Input ValidToken, ConfigM, Input Config, Input UTCTime, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
+      let happyRunner :: Config -> Sem '[Input ValidToken, ConfigM, State Config, Input Config, Input UTCTime, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
           happyRunner config =
             run
               . runInputConst accessTokenEndpoint
               . runInputConst refreshTokenEndpoint
               . runInputConst testCurrentTime
               . runInputConst config
+              . evalState config
               . runConfigM
               . runValidToken
       it "uses the config token if not expired" $

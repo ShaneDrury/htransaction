@@ -9,11 +9,10 @@ where
 
 import App
 import Cli
-import Config
 import Control.Monad
 import Polysemy
-import Polysemy.Cached
 import Polysemy.Config
+import Polysemy.State
 import Polysemy.LastImported
 import Token
 import Transaction
@@ -27,9 +26,10 @@ runapp Args {..} =
     . runLoggerOnRainbow
     . runGetConfig configFile
     . runWriteConfig configFile
-    . runCached @Config
     . runOutputOnCsv outfile
     . runGetTime
+    . evalState Dirty
+    . runStateCached
     . runConfigM
     . runBankAccountsMOnConfig
     . runUseRefreshTokens

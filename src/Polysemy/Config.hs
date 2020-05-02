@@ -1,13 +1,15 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
@@ -18,11 +20,14 @@ module Polysemy.Config
     runGetConfigTest,
     runWriteConfig,
     getConfig,
+    writeConfig,
     ConfigM,
     BankAccountsM,
     getBankAccounts,
     runBankAccountsMOnConfig,
     runConfigM,
+    runStateCached,
+    Cached (..),
   )
 where
 
@@ -36,17 +41,37 @@ import Data.Time
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
+import Polysemy.State
 import Types
 import Prelude
 
 data ConfigM m a where
   GetConfig :: ConfigM m Config
+  WriteConfig :: Config -> ConfigM m ()
 
 $(makeSem ''ConfigM)
 
-runConfigM :: (Members '[Input Config] r) => InterpreterFor ConfigM r
+runConfigM :: (Members '[State Config] r) => InterpreterFor ConfigM r
 runConfigM = interpret $ \case
-  GetConfig -> input @Config
+  GetConfig -> get @Config
+  WriteConfig s -> put @Config s
+
+data Cached a = Cached a | Dirty
+  deriving stock (Eq, Ord, Show, Functor)
+
+runStateCached :: (Members '[State (Cached Config), Input Config, Output Config] r) => InterpreterFor (State Config) r
+runStateCached = interpret $ \case
+  Get -> do
+    cachedConfig <- get @(Cached Config)
+    case cachedConfig of
+      Dirty -> do
+        cfg <- input @Config
+        put @(Cached Config) (Cached cfg)
+        return cfg
+      Cached cfg -> return cfg
+  Put cfg -> do
+    output @Config cfg
+    put @(Cached Config) (Cached cfg)
 
 data BankAccountsM m a where
   GetBankAccounts :: BankAccountsM m BankAccounts

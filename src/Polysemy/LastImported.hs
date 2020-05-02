@@ -1,4 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -7,6 +6,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
@@ -45,14 +45,14 @@ runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => InterpreterFor (Outp
 runOutputLastImportedOnStdout = interpret $ \case
   Output day -> embed $ print day
 
-runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Output Config, Logger] r) => Int -> InterpreterFor (Output LastImported) r
+runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Logger] r) => Int -> InterpreterFor (Output LastImported) r
 runOutputLastImportedOnFile bankAccountId = interpret $ \case
   Output day -> do
     originalConfig <- getConfig
     originalDay <- getLastImported
     when (day /= originalDay) $ do
       info $ "Outputting last imported day of " ++ show day
-      output (updateConfig bankAccountId day originalConfig)
+      writeConfig (updateConfig bankAccountId day originalConfig)
 
 runGetLastImported :: (Members '[BankAccountsM] r) => Int -> InterpreterFor (Input LastImported) r
 runGetLastImported bankAccountId = interpret $ \case
