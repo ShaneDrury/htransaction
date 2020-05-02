@@ -59,19 +59,23 @@ runConfigM = interpret $ \case
 data Cached a = Cached a | Dirty
   deriving stock (Eq, Ord, Show, Functor)
 
-runStateCached :: (Members '[State (Cached Config), Input Config, Output Config] r) => InterpreterFor (State Config) r
-runStateCached = interpret $ \case
-  Get -> do
-    cachedConfig <- get @(Cached Config)
-    case cachedConfig of
-      Dirty -> do
-        cfg <- input @Config
-        put @(Cached Config) (Cached cfg)
-        return cfg
-      Cached cfg -> return cfg
-  Put cfg -> do
-    output @Config cfg
-    put @(Cached Config) (Cached cfg)
+runStateCached :: (Members '[Input Config, Output Config] r) => Sem (State Config : State (Cached Config) : r) a -> Sem r a
+runStateCached =
+  evalState @(Cached Config) Dirty
+    . interpret
+      ( \case
+          Get -> do
+            cachedConfig <- get @(Cached Config)
+            case cachedConfig of
+              Dirty -> do
+                cfg <- input @Config
+                put @(Cached Config) (Cached cfg)
+                return cfg
+              Cached cfg -> return cfg
+          Put cfg -> do
+            output @Config cfg
+            put @(Cached Config) (Cached cfg)
+      )
 
 data BankAccountsM m a where
   GetBankAccounts :: BankAccountsM m BankAccounts

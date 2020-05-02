@@ -12,7 +12,6 @@ import Cli
 import Control.Monad
 import Polysemy
 import Polysemy.Config
-import Polysemy.State
 import Polysemy.LastImported
 import Token
 import Transaction
@@ -28,7 +27,6 @@ runapp Args {..} =
     . runWriteConfig configFile
     . runOutputOnCsv outfile
     . runGetTime
-    . evalState Dirty
     . runStateCached
     . runConfigM
     . runBankAccountsMOnConfig
