@@ -53,11 +53,10 @@ configToken :: Config -> UTCTime -> Either InvalidToken ValidToken
 configToken config currentTime =
   case config ^. token of
     Just t ->
-      ( case config ^. tokenExpiresAt of
-          Just expires -> do
-            if expires <= currentTime
-              then Left $ InvalidToken Expired
-              else Right $ ValidToken $ BS.pack t
-          Nothing -> Left $ InvalidToken Missing
-      )
+      case config ^. tokenExpiresAt of
+        Just expires -> do
+          if expires <= currentTime
+            then Left $ InvalidToken Expired
+            else Right $ ValidToken $ BS.pack t
+        Nothing -> Left $ InvalidToken Missing
     Nothing -> Left $ InvalidToken Missing

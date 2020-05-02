@@ -103,7 +103,7 @@ newtype TransactionsEndpoint
   deriving (Eq, Generic, Show, FromJSON)
 
 getTransactionsNetwork :: (MonadHttp m, FromJSON a) => Int -> Day -> ValidToken -> m (JsonResponse a)
-getTransactionsNetwork bankAccountId day (ValidToken token) = do
+getTransactionsNetwork bankAccountId day (ValidToken token) =
   req
     GET
     (https "api.freeagent.com" /: "v2" /: "bank_transactions")
@@ -192,7 +192,7 @@ runApiManagerOnNetwork = interpret $ \case
     token <- input @ValidToken
     result <- embed $ E.try $ do
       r <- runReq defaultHttpConfig $ getTransactionsNetwork bankAccountId fromDate token
-      return (responseBody $ r :: TransactionsEndpoint)
+      return (responseBody r :: TransactionsEndpoint)
     case result of
       Right r -> return $ Right r
       Left err' ->

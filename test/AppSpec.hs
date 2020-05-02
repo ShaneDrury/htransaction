@@ -219,7 +219,7 @@ spec = do
     context "happy, simple path"
       $ context "with one transaction"
       $ it "imports 1 transaction"
-      $ (runAppSimple testTransactions app)
+      $ runAppSimple testTransactions app
         `shouldBe` ( [(Info, "Number of transactions: 1")],
                      ( [ LastImported $ fromGregorian 2020 4 20
                        ],
