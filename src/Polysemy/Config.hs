@@ -17,7 +17,6 @@
 
 module Polysemy.Config
   ( runGetConfig,
-    runGetConfigTest,
     runWriteConfig,
     getConfig,
     writeConfig,
@@ -36,8 +35,6 @@ import Control.Lens
 import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as S
-import qualified Data.Map as Map
-import Data.Time
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
@@ -100,16 +97,3 @@ runWriteConfig fp = interpret $ \case
   Output cfg -> do
     info $ "Writing config to " ++ fp
     embed $ S.writeFile fp (encode cfg)
-
-runGetConfigTest :: InterpreterFor (Input Config) r
-runGetConfigTest = interpret $ \case
-  Input ->
-    return $
-      Config
-        { _bankAccounts = Map.fromList [(123, LastImported $ fromGregorian 2020 02 04), (679673, LastImported $ fromGregorian 2020 02 07)],
-          _token = Just "token",
-          _refreshToken = Just "refresh",
-          _clientID = "clientid",
-          _clientSecret = "secret",
-          _tokenExpiresAt = Nothing
-        }
