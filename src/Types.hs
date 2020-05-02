@@ -94,8 +94,8 @@ runLoggerOnRainbow =
   where
     msg = chunk . T.pack
 
-runLoggerAsOutput :: (Members '[Output LogMsg] r) => InterpreterFor (Log LogMsg) r
+runLoggerAsOutput :: Sem (Log LogMsg : r) a -> Sem (Output LogMsg : r) a
 runLoggerAsOutput =
-  interpret
+  reinterpret
     ( \(Log logmsg) -> output logmsg
     )

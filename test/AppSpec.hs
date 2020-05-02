@@ -42,7 +42,7 @@ runTransactionsManagerSimple txs = interpret $ \case
   GetTransactions -> return txs
   OutputTransactions tx -> output tx
 
-runAppEmpty :: Sem '[Output LastImported, TransactionsManager, Logger, Output LogMsg] () -> ([LogMsg], ([LastImported], ()))
+runAppEmpty :: Sem '[Output LastImported, TransactionsManager, Logger] () -> ([LogMsg], ([LastImported], ()))
 runAppEmpty =
   run
     . runOutputList @LogMsg
@@ -50,7 +50,7 @@ runAppEmpty =
     . runTransactionsManagerEmpty
     . runOutputList @LastImported
 
-runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Output LastImported, Logger, Output LogMsg] () -> ([LogMsg], ([LastImported], ([[Transaction]], ())))
+runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Output LastImported, Logger] () -> ([LogMsg], ([LastImported], ([[Transaction]], ())))
 runAppSimple transactions =
   run
     . runOutputList @LogMsg
@@ -142,7 +142,6 @@ runAppDeep ::
        LastImportedManager,
        ConfigM,
        Logger,
-       Output LogMsg,
        Error H.HttpException,
        Error ApiError,
        Error AppError
