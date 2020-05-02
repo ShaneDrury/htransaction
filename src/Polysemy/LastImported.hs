@@ -37,8 +37,8 @@ data LastImportedManager m a where
 
 $(makeSem ''LastImportedManager)
 
-runLastImportedManager :: (Members '[Input LastImported] r) => InterpreterFor LastImportedManager r
-runLastImportedManager = interpret $ \case
+runLastImportedManager :: Sem (LastImportedManager : r) a -> Sem (Input LastImported : r) a
+runLastImportedManager = reinterpret $ \case
   GetLastImported -> input @LastImported
 
 runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => InterpreterFor (Output LastImported) r
@@ -54,10 +54,10 @@ runOutputLastImportedOnFile bankAccountId = interpret $ \case
       info $ "Outputting last imported day of " ++ show day
       writeConfig (updateConfig bankAccountId day originalConfig)
 
-runGetLastImported :: (Members '[BankAccountsM] r) => Int -> InterpreterFor (Input LastImported) r
-runGetLastImported bankAccountId = interpret $ \case
+runGetLastImported :: Int -> Sem (Input LastImported : r) a -> Sem (BankAccountsM : r) a
+runGetLastImported bankAccountId = reinterpret $ \case
   Input -> do
-    bankAccounts <- getBankAccounts
-    case Map.lookup bankAccountId bankAccounts of
+    bas <- getBankAccounts
+    case Map.lookup bankAccountId bas of
       Just day -> return day
       Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId

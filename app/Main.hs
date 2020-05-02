@@ -32,16 +32,15 @@ runapp Args {..} =
     . runStateCached @Config
     . runConfigM
     . runBankAccountsMOnConfig
-    . runUseRefreshTokens
     . runGetLastImported bankAccountId
     . runLastImportedManager
     . runOutputLastImportedOnFile bankAccountId
+    . runUseRefreshTokens
     . runGetAccessTokens
     . runSaveRefreshTokens
     . runSaveAccessTokens
     . runValidToken
     . runApiManagerOnNetwork
-    . runLastImportedManager
     . runInputOnApi bankAccountId
     . retryOnUnauthorized
     . runTransactionsManager

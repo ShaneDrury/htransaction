@@ -138,15 +138,12 @@ runAppDeep ::
        Input (Either ApiError [Transaction]),
        ApiManager,
        Input (Maybe (Maybe [Transaction])),
-       LastImportedManager,
        Input ValidToken,
        Input (Tagged AccessToken TokenEndpoint),
        Input UTCTime,
        Input (Tagged Refresh TokenEndpoint),
        Output LastImported,
        LastImportedManager,
-       Input LastImported,
-       BankAccountsM,
        ConfigM,
        State Config,
        Output Config,
@@ -178,7 +175,6 @@ runAppDeep tx config =
     . runInputConst accessTokenEndpoint
     . runSaveAccessTokens
     . runValidToken
-    . runLastImportedManager
     . runInputList tx
     . runApiManager
     . runInputOnApi 1
