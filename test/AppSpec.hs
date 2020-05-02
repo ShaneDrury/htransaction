@@ -149,7 +149,6 @@ runAppDeep ::
        BankAccountsM,
        ConfigM,
        State Config,
-       State (Cached Config),
        Output Config,
        Input Config,
        Logger,

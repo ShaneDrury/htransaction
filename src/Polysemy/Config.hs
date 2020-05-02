@@ -59,10 +59,10 @@ runConfigM = interpret $ \case
 data Cached a = Cached a | Dirty
   deriving stock (Eq, Ord, Show, Functor)
 
-runStateCached :: forall v r a. (Members '[Input v, Output v] r) => Sem (State v : State (Cached v) : r) a -> Sem r a
+runStateCached :: forall v r. (Members '[Input v, Output v] r) => InterpreterFor (State v) r
 runStateCached =
   evalState @(Cached v) Dirty
-    . interpret
+    . reinterpret
       ( \case
           Get -> do
             cachedConfig <- get @(Cached v)
