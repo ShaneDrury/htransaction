@@ -141,8 +141,6 @@ runAppDeep ::
        Output LastImported,
        LastImportedManager,
        ConfigM,
-       Output Config,
-       Input Config,
        Logger,
        Output LogMsg,
        Error H.HttpException,

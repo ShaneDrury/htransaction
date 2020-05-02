@@ -27,7 +27,6 @@ runapp Args {..} =
     . runLoggerOnRainbow
     . runGetConfig configFile
     . runWriteConfig configFile
-    . runGetTime
     . runStateCached @Config
     . runConfigM
     . runBankAccountsMOnConfig
@@ -35,6 +34,7 @@ runapp Args {..} =
     . runLastImportedManager
     . runOutputLastImportedOnFile bankAccountId
     . runUseRefreshTokens
+    . runGetTime
     . runGetAccessTokens
     . runSaveRefreshTokens
     . runSaveAccessTokens
