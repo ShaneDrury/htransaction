@@ -114,9 +114,9 @@ testTransactions =
       }
   ]
 
-runApiManager :: Members '[Input (Maybe (Maybe [Transaction])), Input ValidToken, Error H.HttpException] r => InterpreterFor ApiManager r
+runApiManager :: Members '[Input (Maybe (Maybe [Transaction])), Error H.HttpException] r => Sem (ApiManager : r) a -> Sem (Input ValidToken : r) a
 runApiManager =
-  interpret
+  reinterpret
     ( \case
         GetApiTransactions _ _ -> do
           input @ValidToken
@@ -135,7 +135,6 @@ runAppDeep ::
   Sem
     '[ TransactionsManager,
        Input (Maybe (Maybe [Transaction])),
-       Input ValidToken,
        Input (Tagged AccessToken TokenEndpoint),
        Input UTCTime,
        Input (Tagged Refresh TokenEndpoint),
@@ -170,8 +169,8 @@ runAppDeep tx config =
     . runSaveRefreshTokens
     . runInputConst accessTokenEndpoint
     . runSaveAccessTokens
-    . runValidToken
     . runInputList tx
+    . runValidToken
     . runApiManager
     . runInputOnApi 1
     . retryOnUnauthorized

@@ -178,13 +178,13 @@ runInputOnApi bankAccountId =
 runApiManagerOnNetwork ::
   ( Members
       '[ Embed IO,
-         Error HttpException,
-         Input ValidToken
+         Error HttpException
        ]
       r
   ) =>
-  InterpreterFor ApiManager r
-runApiManagerOnNetwork = interpret $ \case
+  Sem (ApiManager : r) a ->
+  Sem (Input ValidToken : r) a
+runApiManagerOnNetwork = reinterpret $ \case
   GetApiTransactions bankAccountId fromDate -> do
     token <- input @ValidToken
     result <- embed $ E.try $ do
