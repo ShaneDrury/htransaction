@@ -38,6 +38,7 @@ runapp Args {..} =
     . runGetTime
     . runSaveRefreshTokens
     . runSaveAccessTokens
+    . runGetValidToken
     . runValidToken
     . runApiManagerOnNetwork
     . runInputOnApi bankAccountId

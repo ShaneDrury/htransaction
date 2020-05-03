@@ -9,6 +9,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -22,6 +23,7 @@ module Token
     Refresh,
     AccessToken,
     TokenEndpoint (..),
+    runGetValidToken,
   )
 where
 
@@ -38,9 +40,20 @@ import Network.HTTP.Req
 import Polysemy
 import Polysemy.Config
 import Polysemy.Input
-import Polysemy.Output
 import Types
 import Prelude
+
+data TokenM m a where
+  GetValidToken :: TokenM m (Either InvalidToken ValidToken)
+
+$(makeSem ''TokenM)
+
+runGetValidToken :: Members '[Input UTCTime, ConfigM] r => InterpreterFor TokenM r
+runGetValidToken = interpret $ \case
+  GetValidToken -> do
+    config <- getConfig
+    currentTime <- input
+    return $ configToken config currentTime
 
 data Refresh
 
@@ -115,12 +128,11 @@ authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=
 toValidToken :: Tagged b TokenEndpoint -> ValidToken
 toValidToken tagged = ValidToken $ BS.pack $ access_token (unTagged tagged)
 
-runValidToken :: (Members '[ConfigM, Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => Sem (Input ValidToken : r) a -> Sem (Input UTCTime : r) a
+runValidToken :: (Members '[Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => Sem (Input ValidToken : r) a -> Sem (TokenM : r) a
 runValidToken = reinterpret $ \case
   Input -> do
-    config <- getConfig
-    currentTime <- input
-    case configToken config currentTime of
+    eValidToken <- getValidToken
+    case eValidToken of
       Left (InvalidToken Missing) -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
       Left (InvalidToken Expired) -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
       Right validToken -> return validToken
