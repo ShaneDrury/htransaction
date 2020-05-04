@@ -13,8 +13,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Polysemy.LastImported
-  ( runOutputLastImportedOnStdout,
-    runOutputLastImportedOnFile,
+  ( runOutputLastImportedOnFile,
     runGetLastImported,
     LastImportedManager (..),
     getLastImported,
@@ -40,10 +39,6 @@ $(makeSem ''LastImportedManager)
 runLastImportedManager :: Sem (LastImportedManager : r) a -> Sem (Input LastImported : r) a
 runLastImportedManager = reinterpret $ \case
   GetLastImported -> input @LastImported
-
-runOutputLastImportedOnStdout :: (Members '[Embed IO] r) => InterpreterFor (Output LastImported) r
-runOutputLastImportedOnStdout = interpret $ \case
-  Output day -> embed $ print day
 
 runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Logger] r) => Int -> InterpreterFor (Output LastImported) r
 runOutputLastImportedOnFile bankAccountId = interpret $ \case
