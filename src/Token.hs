@@ -50,10 +50,7 @@ $(makeSem ''TokenM)
 
 runGetValidToken :: Members '[Input UTCTime, ConfigM] r => InterpreterFor TokenM r
 runGetValidToken = interpret $ \case
-  GetValidToken -> do
-    config <- getConfig
-    currentTime <- input
-    return $ configToken config currentTime
+  GetValidToken -> configToken <$> getConfig <*> input
 
 data Refresh
 
