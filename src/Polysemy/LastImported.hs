@@ -13,46 +13,57 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Polysemy.LastImported
-  ( runOutputLastImportedOnFile,
-    runGetLastImported,
-    LastImportedManager (..),
+  ( GetLastImportedM (..),
+    PersistLastImportedM (..),
     getLastImported,
     runLastImportedManager,
+    persistLastImported,
+    runPersistLastImportedM,
+    runPersistLastImportedMList,
   )
 where
 
 import Config
 import Control.Monad
 import qualified Data.Map as Map
+import Data.Time
 import Polysemy
 import Polysemy.Config
-import Polysemy.Input
 import Polysemy.Output
 import Types
 import Prelude
 
-data LastImportedManager m a where
-  GetLastImported :: LastImportedManager m LastImported
+data GetLastImportedM m a where
+  GetLastImported :: GetLastImportedM m Day
 
-$(makeSem ''LastImportedManager)
+data PersistLastImportedM m a where
+  PersistLastImported :: Day -> PersistLastImportedM m ()
 
-runLastImportedManager :: Sem (LastImportedManager : r) a -> Sem (Input LastImported : r) a
-runLastImportedManager = reinterpret $ \case
-  GetLastImported -> input @LastImported
+$(makeSem ''GetLastImportedM)
 
-runOutputLastImportedOnFile :: (Members '[LastImportedManager, ConfigM, Logger] r) => Int -> InterpreterFor (Output LastImported) r
-runOutputLastImportedOnFile bankAccountId = interpret $ \case
-  Output day -> do
+$(makeSem ''PersistLastImportedM)
+
+runLastImportedManager :: (Members '[BankAccountsM, ConfigM, Logger] r) => Int -> InterpreterFor GetLastImportedM r
+runLastImportedManager bankAccountId = interpret $ \case
+  GetLastImported -> do
+    bas <- getBankAccounts
+    case Map.lookup bankAccountId bas of
+      Just (LastImported day) -> return day
+      Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId
+
+runPersistLastImportedM :: (Members '[BankAccountsM, ConfigM, Logger, GetLastImportedM] r) => Int -> InterpreterFor PersistLastImportedM r
+runPersistLastImportedM bankAccountId = interpret $ \case
+  PersistLastImported day -> do
     originalConfig <- getConfig
     originalDay <- getLastImported
     when (day /= originalDay) $ do
       info $ "Outputting last imported day of " ++ show day
-      writeConfig (updateConfig bankAccountId day originalConfig)
+      writeConfig (updateConfig bankAccountId (LastImported day) originalConfig)
 
-runGetLastImported :: Int -> Sem (Input LastImported : r) a -> Sem (BankAccountsM : r) a
-runGetLastImported bankAccountId = reinterpret $ \case
-  Input -> do
-    bas <- getBankAccounts
-    case Map.lookup bankAccountId bas of
-      Just day -> return day
-      Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId
+runPersistLastImportedMList :: Sem (PersistLastImportedM : r) a -> Sem r ([LastImported], a)
+runPersistLastImportedMList =
+  runOutputList @LastImported
+    . reinterpret
+      ( \case
+          PersistLastImported day -> output (LastImported day)
+      )

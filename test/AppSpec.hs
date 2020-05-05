@@ -3,7 +3,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
 module AppSpec
   ( spec,
@@ -32,31 +31,28 @@ import Transaction
 import Types
 import Prelude
 
-runTransactionsManagerEmpty :: InterpreterFor TransactionsManager r
+runTransactionsManagerEmpty :: InterpreterFor NextTransactionsM r
 runTransactionsManagerEmpty = interpret $ \case
-  GetTransactions -> return []
-  OutputTransactions _ -> return ()
+  GetNextTransactions -> return []
 
-runTransactionsManagerSimple :: (Members '[Output [Transaction]] r) => [Transaction] -> InterpreterFor TransactionsManager r
+runTransactionsManagerSimple :: [Transaction] -> InterpreterFor NextTransactionsM r
 runTransactionsManagerSimple txs = interpret $ \case
-  GetTransactions -> return txs
-  OutputTransactions tx -> output tx
+  GetNextTransactions -> return txs
 
-runAppEmpty :: Sem '[Output LastImported, TransactionsManager, Logger] () -> ([LogMsg], ([LastImported], ()))
+runAppEmpty :: Sem '[NextTransactionsM, ShowTransactionsM, Logger] () -> ([LogMsg], ())
 runAppEmpty =
   run
     . runOutputList @LogMsg
     . runLoggerAsOutput
+    . runShowTransactionsMEmpty
     . runTransactionsManagerEmpty
-    . runOutputList @LastImported
 
-runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Output LastImported, Logger] () -> ([LogMsg], ([LastImported], ([[Transaction]], ())))
+runAppSimple :: [Transaction] -> Sem '[NextTransactionsM, ShowTransactionsM, Logger] () -> ([LogMsg], ([[Transaction]], ()))
 runAppSimple transactions =
   run
     . runOutputList @LogMsg
     . runLoggerAsOutput
-    . runOutputList @LastImported
-    . runOutputList @[Transaction]
+    . runShowTransactionsMOnList
     . runTransactionsManagerSimple transactions
 
 testTokenExpiresAt :: Maybe UTCTime
@@ -114,12 +110,12 @@ testTransactions =
       }
   ]
 
-runApiManager :: Members '[Input (Maybe (Maybe [Transaction])), Error H.HttpException] r => Sem (ApiManager : r) a -> Sem (Input ValidToken : r) a
-runApiManager =
-  reinterpret
+runFaMTest :: Members '[Input (Maybe (Maybe [Transaction])), Error ApiError, ValidTokenM] r => InterpreterFor (FaM TransactionsEndpoint) r
+runFaMTest =
+  interpret
     ( \case
-        GetApiTransactions _ _ -> do
-          input @ValidToken
+        GetFa _ _ -> do
+          getValidToken
           mmtxs <- input @(Maybe (Maybe [Transaction]))
           case mmtxs of
             Just mtxs ->
@@ -129,19 +125,24 @@ runApiManager =
             Nothing -> return $ Right $ transactionsEndpoint []
     )
 
--- app :: (Members '[TransactionsManager, Output LastImported, Logger] r) => Sem r ()
-
 runAppDeep ::
   [Maybe [Transaction]] ->
   Config ->
   Sem
-    '[ TransactionsManager,
+    '[ NextTransactionsM,
+       TransactionsManager,
+       TransactionsApiM,
+       FaM TransactionsEndpoint,
+       ValidTokenM,
+       TokenM,
        Input UTCTime,
+       ShowTransactionsM,
        Input (Maybe (Maybe [Transaction])),
        Input (Tagged AccessToken TokenEndpoint),
        Input (Tagged Refresh TokenEndpoint),
-       Output LastImported,
-       LastImportedManager,
+       PersistLastImportedM,
+       GetLastImportedM,
+       BankAccountsM,
        ConfigM,
        Logger,
        Error H.HttpException,
@@ -160,30 +161,30 @@ runAppDeep tx config =
     . runStateCached @Config
     . runConfigM
     . runBankAccountsMOnConfig
-    . runGetLastImported 1
-    . runLastImportedManager
-    . runOutputLastImportedOnFile 1
+    . runLastImportedManager 1
+    . runPersistLastImportedM 1
     . runInputConst refreshTokenEndpoint
     . runInputConst accessTokenEndpoint
     . runInputList tx
+    . runShowTransactionsMOnList
     . runInputConst testCurrentTime
     . runSaveRefreshTokens
     . runSaveAccessTokens
-    . runGetValidToken
+    . runGetToken
     . runValidToken
-    . runApiManager
-    . runInputOnApi 1
+    . runFaMTest
     . retryOnUnauthorized
-    . runOutputList @[Transaction]
-    . runTransactionsManager
+    . runTransactionsApiM
+    . runTransactionsManager 1
+    . runNextTransactionsMOnLastImported
 
 spec :: Spec
 spec = do
   describe "runValidToken" $ do
-    let tokenApp :: (Members '[Input ValidToken] r) => Sem r ValidToken
-        tokenApp = input @ValidToken
+    let tokenApp :: (Members '[ValidTokenM] r) => Sem r Token
+        tokenApp = getValidToken
     context "happy path" $ do
-      let happyRunner :: Config -> Sem '[Input ValidToken, Input UTCTime, ConfigM, Input Config, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
+      let happyRunner :: Config -> Sem '[ValidTokenM, TokenM, Input UTCTime, ConfigM, Input Config, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] Token -> Token
           happyRunner config =
             run
               . runInputConst accessTokenEndpoint
@@ -192,7 +193,7 @@ spec = do
               . evalState config
               . runConfigM
               . runInputConst testCurrentTime
-              . runGetValidToken
+              . runGetToken
               . runValidToken
       it "uses the config token if not expired" $
         happyRunner testConfig tokenApp `shouldBe` ValidToken (BS.pack "token")
@@ -205,18 +206,15 @@ spec = do
   describe "app" $ do
     context "empty path"
       $ it "imports nothing"
-      $ runAppEmpty app `shouldBe` ([(Info, "Number of transactions: 0")], ([], ()))
+      $ runAppEmpty app `shouldBe` ([(Info, "Number of transactions: 0")], ())
     context "happy, simple path"
       $ context "with one transaction"
       $ it "imports 1 transaction"
       $ runAppSimple testTransactions app
         `shouldBe` ( [(Info, "Number of transactions: 1")],
-                     ( [ LastImported $ fromGregorian 2020 4 20
+                     ( [ testTransactions
                        ],
-                       ( [ testTransactions
-                         ],
-                         ()
-                       )
+                       ()
                      )
                    )
     context "with 100 transactions" $ do
@@ -232,12 +230,9 @@ spec = do
       it "imports 100 transaction and produces a warning" $
         runAppSimple transactions_100 app
           `shouldBe` ( [(Info, "Number of transactions: 100"), (Warning, "WARNING: Number of transactions close to limit")],
-                       ( [ LastImported $ fromGregorian 2020 4 20
+                       ( [ transactions_100
                          ],
-                         ( [ transactions_100
-                           ],
-                           ()
-                         )
+                         ()
                        )
                      )
     context "happy, deep path" $ do
@@ -246,9 +241,9 @@ spec = do
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
-              `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
-                             (Info, "Number of transactions: 1"),
-                             (Info, "Outputting last imported day of LastImported 2020-04-20")
+              `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
+                             (Info, "Outputting last imported day of 2020-04-20"),
+                             (Info, "Number of transactions: 1")
                            ],
                            ( [ updateConfig 1 (LastImported $ fromGregorian 2020 4 20) testConfig
                              ],
@@ -263,7 +258,7 @@ spec = do
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
-              `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
+              `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                              (Info, "Number of transactions: 0")
                            ],
                            ([], ([[]], ()))
@@ -278,9 +273,9 @@ spec = do
                   tokenExpiresAt .= Just (addUTCTime (secondsToNominalDiffTime 86400) testCurrentTime)
                 updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 20)
              in r
-                  `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
-                                 (Info, "Number of transactions: 1"),
-                                 (Info, "Outputting last imported day of LastImported 2020-04-20")
+                  `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
+                                 (Info, "Outputting last imported day of 2020-04-20"),
+                                 (Info, "Number of transactions: 1")
                                ],
                                ( [ updatedTokenConfig,
                                    updatedLastImportConfig
@@ -301,11 +296,10 @@ spec = do
                   tokenExpiresAt .= Just (addUTCTime (secondsToNominalDiffTime 86400) testCurrentTime)
                 updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 20)
              in r
-                  `shouldBe` ( [ (Info, "Getting transactions from 1 after 2020-04-19"),
+                  `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),
-                                 (Info, "Getting transactions from 1 after 2020-04-19"),
-                                 (Info, "Number of transactions: 1"),
-                                 (Info, "Outputting last imported day of LastImported 2020-04-20")
+                                 (Info, "Outputting last imported day of 2020-04-20"),
+                                 (Info, "Number of transactions: 1")
                                ],
                                ( [ updatedTokenConfig,
                                    updatedLastImportConfig

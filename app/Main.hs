@@ -30,21 +30,21 @@ runapp Args {..} =
     . runStateCached @Config
     . runConfigM
     . runBankAccountsMOnConfig
-    . runGetLastImported bankAccountId
-    . runLastImportedManager
-    . runOutputLastImportedOnFile bankAccountId
+    . runLastImportedManager bankAccountId
+    . runPersistLastImportedM bankAccountId
     . runUseRefreshTokens
     . runGetAccessTokens
     . runGetTime
     . runSaveRefreshTokens
     . runSaveAccessTokens
-    . runGetValidToken
+    . runGetToken
     . runValidToken
-    . runApiManagerOnNetwork
-    . runInputOnApi bankAccountId
+    . runFaM
     . retryOnUnauthorized
     . runOutputOnCsv outfile
-    . runTransactionsManager
+    . runTransactionsApiM
+    . runTransactionsManager bankAccountId
+    . runNextTransactionsMOnLastImported
 
 main :: IO ()
 main = do

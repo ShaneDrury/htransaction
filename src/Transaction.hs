@@ -17,16 +17,23 @@ module Transaction
   ( Transaction (..),
     TransactionDate (..),
     latestTransaction,
-    runInputOnApi,
     runOutputOnCsv,
     retryOnUnauthorized,
     TransactionsManager (..),
     getTransactions,
     runTransactionsManager,
-    outputTransactions,
-    ApiManager (..),
-    runApiManagerOnNetwork,
     TransactionsEndpoint (..),
+    NextTransactionsM (..),
+    getNextTransactions,
+    ShowTransactionsM,
+    showTransactions,
+    runFaM,
+    runTransactionsApiM,
+    runNextTransactionsMOnLastImported,
+    TransactionsApiM (..),
+    FaM (..),
+    runShowTransactionsMEmpty,
+    runShowTransactionsMOnList,
   )
 where
 
@@ -40,7 +47,7 @@ import qualified Data.Csv as CSV
 import Data.List
 import Data.Ord
 import Data.Tagged
-import Data.Text
+import Data.Text hiding (null)
 import Data.Time
 import GHC.Generics
 import qualified Network.HTTP.Client as H
@@ -49,13 +56,14 @@ import qualified Network.HTTP.Types.Status as Status
 import Polysemy
 import Polysemy.Error
 import Polysemy.Input
-import Polysemy.LastImported
 import Polysemy.Output
+import Polysemy.LastImported
 import Token
 import Types
+import Control.Monad
 import Prelude hiding (log)
 
-newtype TransactionDate = TransactionDate Day deriving (Eq, Show, Generic, FromJSON)
+newtype TransactionDate = TransactionDate Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
 toDay :: TransactionDate -> Day
 toDay = coerce
@@ -69,55 +77,77 @@ data Transaction
         description :: String,
         amount :: String
       }
-  deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord)
+  deriving (Eq, Generic, Show, FromJSON, CSV.ToRecord, ToJSON)
+
+data ShowTransactionsM m a where
+  ShowTransactions :: [Transaction] -> ShowTransactionsM m ()
+
+$(makeSem ''ShowTransactionsM)
 
 data TransactionsManager m a where
-  GetTransactions :: TransactionsManager m [Transaction]
-  OutputTransactions :: [Transaction] -> TransactionsManager m ()
+  GetTransactions :: Day -> TransactionsManager m [Transaction]
 
 makeSem ''TransactionsManager
 
+data TransactionsApiM m a where
+  GetTransactionsApi :: Int -> Day -> TransactionsApiM m [Transaction]
+
+makeSem ''TransactionsApiM
+
 runTransactionsManager ::
   ( Members
-      '[ Error ApiError
+      '[ 
+         TransactionsApiM
        ]
       r
   ) =>
-  Sem (TransactionsManager : r) a ->
-  Sem (Output [Transaction] : Input (Either ApiError [Transaction]) : r) a
-runTransactionsManager = reinterpret2 $ \case
-  GetTransactions -> do
-    etx <- input @(Either ApiError [Transaction])
+  Int ->
+  InterpreterFor TransactionsManager r
+runTransactionsManager bankAccountId = interpret $ \case
+  GetTransactions fromDate -> getTransactionsApi bankAccountId fromDate
+
+data FaM v m a where
+  GetFa :: Text -> Option 'Https -> FaM v m (Either ApiError v)
+
+$(makeSem ''FaM)
+
+runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, Error ApiError] r) => InterpreterFor TransactionsApiM r
+runTransactionsApiM = interpret $ \case
+  GetTransactionsApi bankAccountId fromDate -> do
+    etx <-
+      getFa
+        "bank_transactions"
+        ( "bank_account" =: bankAccountId
+            <> "from_date" =: fromDate
+            <> "sort" =: ("dated_on" :: Text)
+            <> "per_page" =: (100 :: Int)
+        )
     case etx of
-      Right r -> return r
+      Right r -> return $ bank_transactions r
       Left e -> throw e
-  OutputTransactions tx -> output tx
 
 newtype TransactionsEndpoint
   = TransactionsEndpoint
       { bank_transactions :: [Transaction]
       }
-  deriving (Eq, Generic, Show, FromJSON)
+  deriving (Eq, Generic, Show, FromJSON, ToJSON)
 
-getTransactionsNetwork :: (MonadHttp m, FromJSON a) => Int -> Day -> ValidToken -> m (JsonResponse a)
-getTransactionsNetwork bankAccountId day (ValidToken token) =
+faRequest :: (MonadHttp m, FromJSON a) => Text -> Token -> Option 'Https -> m (JsonResponse a)
+faRequest endpoint (ValidToken token) options =
   req
     GET
-    (https "api.freeagent.com" /: "v2" /: "bank_transactions")
+    (https "api.freeagent.com" /: "v2" /: endpoint)
     NoReqBody
     jsonResponse
-    ( "bank_account" =: bankAccountId
-        <> "from_date" =: day
-        <> "sort" =: ("dated_on" :: Text)
-        <> "per_page" =: (100 :: Int)
-        <> oAuth2Bearer token
+    ( oAuth2Bearer token
         <> header
           "User-Agent"
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
+        <> options
     )
 
-latestTransaction :: [Transaction] -> LastImported
-latestTransaction tx = LastImported $ toDay . dated_on $ maximumBy (comparing (toDay . dated_on)) tx
+latestTransaction :: [Transaction] -> Day
+latestTransaction tx = toDay . dated_on $ maximumBy (comparing (toDay . dated_on)) tx
 
 runOutputOnCsv ::
   ( Members
@@ -127,11 +157,23 @@ runOutputOnCsv ::
       r
   ) =>
   FilePath ->
-  InterpreterFor (Output [Transaction]) r
+  InterpreterFor ShowTransactionsM r
 runOutputOnCsv fp = interpret $ \case
-  Output tx -> do
+  ShowTransactions tx -> do
     info $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
+
+runShowTransactionsMEmpty :: InterpreterFor ShowTransactionsM r
+runShowTransactionsMEmpty = interpret $ \case
+  ShowTransactions _ -> return ()
+
+runShowTransactionsMOnList :: Sem (ShowTransactionsM : r) a -> Sem r ([[Transaction]], a)
+runShowTransactionsMOnList =
+  runOutputList @[Transaction]
+  . reinterpret (
+    \case
+      ShowTransactions tx -> output tx
+    )
 
 $(makePrisms ''HttpException) -- req
 
@@ -150,48 +192,25 @@ isUnauthorized e = case statusP e of
   Just status -> status == Status.unauthorized401
   Nothing -> False
 
-data ApiManager m a where
-  GetApiTransactions :: Int -> Day -> ApiManager m (Either ApiError TransactionsEndpoint)
-
-$(makeSem ''ApiManager)
-
-runInputOnApi ::
-  ( Members
-      '[ LastImportedManager,
-         Logger
-       ]
-      r
-  ) =>
-  Int ->
-  Sem (Input (Either ApiError [Transaction]) : r) a ->
-  Sem (ApiManager : r) a
-runInputOnApi bankAccountId =
-  reinterpret @(Input (Either ApiError [Transaction]))
-    ( \case
-        Input -> do
-          (LastImported fromDate) <- getLastImported
-          info $ "Getting transactions from " ++ show bankAccountId ++ " after " ++ show fromDate
-          r <- getApiTransactions bankAccountId fromDate
-          return $ bank_transactions <$> r
-    )
-
-runApiManagerOnNetwork ::
+runFaM ::
+  forall v r.
   ( Members
       '[ Embed IO,
-         Error HttpException
+         Error HttpException,
+         ValidTokenM
        ]
-      r
+      r,
+    FromJSON v
   ) =>
-  Sem (ApiManager : r) a ->
-  Sem (Input ValidToken : r) a
-runApiManagerOnNetwork = reinterpret $ \case
-  GetApiTransactions bankAccountId fromDate -> do
-    token <- input @ValidToken
+  InterpreterFor (FaM v) r
+runFaM = interpret $ \case
+  GetFa endpoint options -> do
+    token <- getValidToken
     result <- embed $ E.try $ do
-      r <- runReq defaultHttpConfig $ getTransactionsNetwork bankAccountId fromDate token
-      return (responseBody r :: TransactionsEndpoint)
+      r <- runReq defaultHttpConfig $ faRequest endpoint token options
+      return (responseBody r :: v)
     case result of
-      Right r -> return $ Right r
+      Right res -> return $ Right (res :: v)
       Left err' ->
         if isUnauthorized err'
           then return $ Left Unauthorized
@@ -202,24 +221,40 @@ runApiManagerOnNetwork = reinterpret $ \case
 -- possibly can get rid of apperror, as it would only cover H.HttpException
 
 retryOnUnauthorized ::
-  Members
+  forall r a.
+  (Members
     '[ Logger,
-       Input (Either ApiError [Transaction]),
+       FaM TransactionsEndpoint,
        Input (Tagged Refresh TokenEndpoint),
        Error HttpException
      ]
-    r =>
+    r
+    ) =>
   Sem r a ->
   Sem r a
 retryOnUnauthorized =
-  intercept @(Input (Either ApiError [Transaction]))
+  intercept @(FaM TransactionsEndpoint)
     ( \case
-        Input -> do
-          r <- input @(Either ApiError [Transaction])
+        GetFa endpoint option -> do
+          r <- getFa @TransactionsEndpoint endpoint option
           case r of
             Left Unauthorized -> do
               err "Unauthorized"
               input @(Tagged Refresh TokenEndpoint)
-              input @(Either ApiError [Transaction])
+              getFa endpoint option
             s -> return s
     )
+
+data NextTransactionsM m a where
+  GetNextTransactions :: NextTransactionsM m [Transaction]
+
+$(makeSem ''NextTransactionsM)
+
+runNextTransactionsMOnLastImported :: (Members '[TransactionsManager, GetLastImportedM, PersistLastImportedM, Logger] r) => InterpreterFor NextTransactionsM r
+runNextTransactionsMOnLastImported = interpret $ \case
+  GetNextTransactions -> do
+    lastImported <- getLastImported
+    info $ "Getting transactions after " ++ show lastImported
+    tx <- getTransactions lastImported
+    unless (null tx) (persistLastImported (latestTransaction tx))
+    return tx

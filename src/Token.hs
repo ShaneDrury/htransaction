@@ -23,7 +23,10 @@ module Token
     Refresh,
     AccessToken,
     TokenEndpoint (..),
-    runGetValidToken,
+    runGetToken,
+    ValidTokenM (..),
+    getValidToken,
+    TokenM (..),
   )
 where
 
@@ -43,14 +46,19 @@ import Polysemy.Input
 import Types
 import Prelude
 
+data ValidTokenM m a where
+  GetValidToken :: ValidTokenM m Token
+
+$(makeSem ''ValidTokenM)
+
 data TokenM m a where
-  GetValidToken :: TokenM m (Either InvalidToken ValidToken)
+  GetToken :: TokenM m Token
 
 $(makeSem ''TokenM)
 
-runGetValidToken :: Members '[Input UTCTime, ConfigM] r => InterpreterFor TokenM r
-runGetValidToken = interpret $ \case
-  GetValidToken -> configToken <$> getConfig <*> input
+runGetToken :: Members '[Input UTCTime, ConfigM] r => InterpreterFor TokenM r
+runGetToken = interpret $ \case
+  GetToken -> configToken <$> getConfig <*> input
 
 data Refresh
 
@@ -122,17 +130,17 @@ useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
 
-toValidToken :: Tagged b TokenEndpoint -> ValidToken
+toValidToken :: Tagged b TokenEndpoint -> Token
 toValidToken tagged = ValidToken $ BS.pack $ access_token (unTagged tagged)
 
-runValidToken :: (Members '[Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint)] r) => Sem (Input ValidToken : r) a -> Sem (TokenM : r) a
-runValidToken = reinterpret $ \case
-  Input -> do
-    eValidToken <- getValidToken
+runValidToken :: (Members '[Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), TokenM] r) => InterpreterFor ValidTokenM r
+runValidToken = interpret $ \case
+  GetValidToken -> do
+    eValidToken <- getToken
     case eValidToken of
-      Left (InvalidToken Missing) -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
-      Left (InvalidToken Expired) -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
-      Right validToken -> return validToken
+      InvalidToken Missing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
+      InvalidToken Expired -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
+      ValidToken validToken -> return $ ValidToken validToken
 
 runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => InterpreterFor (Input (Tagged Refresh TokenEndpoint)) r
 runUseRefreshTokens = interpret $ \case

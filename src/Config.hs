@@ -49,14 +49,14 @@ $(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
 updateConfig :: Int -> LastImported -> Config -> Config
 updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
 
-configToken :: Config -> UTCTime -> Either InvalidToken ValidToken
+configToken :: Config -> UTCTime -> Token
 configToken config currentTime =
   case config ^. token of
     Just t ->
       case config ^. tokenExpiresAt of
         Just expires -> do
           if expires <= currentTime
-            then Left $ InvalidToken Expired
-            else Right $ ValidToken $ BS.pack t
-        Nothing -> Left $ InvalidToken Missing
-    Nothing -> Left $ InvalidToken Missing
+            then  InvalidToken Expired
+            else ValidToken $ BS.pack t
+        Nothing -> InvalidToken Missing
+    Nothing -> InvalidToken Missing
