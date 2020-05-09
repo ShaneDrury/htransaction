@@ -22,7 +22,8 @@ module Types
     err,
     LogType (..),
     ApiError (..),
-    Token (..),
+    InvalidToken (..),
+    ValidToken (..),
     InvalidTokenReason (..),
   )
 where
@@ -46,9 +47,10 @@ newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, T
 
 data ApiError = Unauthorized deriving stock (Eq, Show)
 
-data InvalidTokenReason = Expired | Missing deriving (Eq, Show)
+data InvalidTokenReason = Expired | Missing deriving stock (Eq, Show)
 
-data Token = InvalidToken InvalidTokenReason | ValidToken BS.ByteString deriving stock (Eq, Show)
+data InvalidToken = InvalidToken InvalidTokenReason deriving stock (Eq, Show)
+data ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
 
 runOutputOnLog :: (Members '[Embed IO] r) => Bool -> InterpreterFor Trace r
 runOutputOnLog verbose = interpret $ \case

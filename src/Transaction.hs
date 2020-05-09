@@ -132,7 +132,7 @@ newtype TransactionsEndpoint
       }
   deriving (Eq, Generic, Show, FromJSON, ToJSON)
 
-faRequest :: (MonadHttp m, FromJSON a) => Text -> Token -> Option 'Https -> m (JsonResponse a)
+faRequest :: (MonadHttp m, FromJSON a) => Text -> ValidToken -> Option 'Https -> m (JsonResponse a)
 faRequest endpoint (ValidToken token) options =
   req
     GET

@@ -47,12 +47,12 @@ import Types
 import Prelude
 
 data ValidTokenM m a where
-  GetValidToken :: ValidTokenM m Token
+  GetValidToken :: ValidTokenM m ValidToken
 
 $(makeSem ''ValidTokenM)
 
 data TokenM m a where
-  GetToken :: TokenM m Token
+  GetToken :: TokenM m (Either InvalidToken ValidToken)
 
 $(makeSem ''TokenM)
 
@@ -130,7 +130,7 @@ useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
 
-toValidToken :: Tagged b TokenEndpoint -> Token
+toValidToken :: Tagged b TokenEndpoint -> ValidToken
 toValidToken tagged = ValidToken $ BS.pack $ access_token (unTagged tagged)
 
 runValidToken :: (Members '[Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), TokenM] r) => InterpreterFor ValidTokenM r
@@ -138,9 +138,9 @@ runValidToken = interpret $ \case
   GetValidToken -> do
     eValidToken <- getToken
     case eValidToken of
-      InvalidToken Missing -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
-      InvalidToken Expired -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
-      ValidToken validToken -> return $ ValidToken validToken
+      Left (InvalidToken Missing) -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
+      Left (InvalidToken Expired) -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
+      Right (ValidToken validToken) -> return $ ValidToken validToken
 
 runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => InterpreterFor (Input (Tagged Refresh TokenEndpoint)) r
 runUseRefreshTokens = interpret $ \case

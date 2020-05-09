@@ -181,10 +181,10 @@ runAppDeep tx config =
 spec :: Spec
 spec = do
   describe "runValidToken" $ do
-    let tokenApp :: (Members '[ValidTokenM] r) => Sem r Token
+    let tokenApp :: (Members '[ValidTokenM] r) => Sem r ValidToken
         tokenApp = getValidToken
     context "happy path" $ do
-      let happyRunner :: Config -> Sem '[ValidTokenM, TokenM, Input UTCTime, ConfigM, Input Config, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] Token -> Token
+      let happyRunner :: Config -> Sem '[ValidTokenM, TokenM, Input UTCTime, ConfigM, Input Config, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
           happyRunner config =
             run
               . runInputConst accessTokenEndpoint
