@@ -16,6 +16,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import Data.Time
+import Fa
 import qualified Network.HTTP.Req as H
 import Polysemy
 import Polysemy.Config
@@ -167,7 +168,7 @@ runAppDeep tx config =
     . runGetToken
     . runValidToken
     . runFaMTest
-    . retryOnUnauthorized
+    . retryOnUnauthorized @TransactionsEndpoint
     . runTransactionsApiM
     . runTransactionsManager 1
     . runNextTransactionsMOnLastImported

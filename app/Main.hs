@@ -19,6 +19,7 @@ import Token
 import Transaction
 import Types
 import Prelude
+import Fa
 
 runapp Args {..} =
   runM
@@ -37,7 +38,7 @@ runapp Args {..} =
     . saveTokens
     . runGetToken
     . runValidToken
-    . runFaM
+    . runFaM @TransactionsEndpoint
     . retryOnUnauthorized
     . runOutputOnCsv outfile
     . runTransactionsApiM
