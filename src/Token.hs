@@ -26,7 +26,8 @@ module Token
     runGetToken,
     ValidTokenM (..),
     getValidToken,
-    TokenM (..),
+    TokenM,
+    refreshTokens,
   )
 where
 
@@ -48,6 +49,7 @@ import Prelude
 
 data ValidTokenM m a where
   GetValidToken :: ValidTokenM m ValidToken
+  RefreshTokens :: ValidTokenM m ()
 
 $(makeSem ''ValidTokenM)
 
@@ -56,7 +58,7 @@ data TokenM m a where
 
 $(makeSem ''TokenM)
 
-runGetToken :: Members '[Input UTCTime, ConfigM] r => InterpreterFor TokenM r
+runGetToken :: Members '[Input UTCTime, ConfigM, Input (Tagged Refresh TokenEndpoint)] r => InterpreterFor TokenM r
 runGetToken = interpret $ \case
   GetToken -> configToken <$> getConfig <*> input
 
@@ -141,6 +143,9 @@ runValidToken = interpret $ \case
       Left (InvalidToken Missing) -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
       Left (InvalidToken Expired) -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
       Right (ValidToken validToken) -> return $ ValidToken validToken
+  RefreshTokens -> do
+    _ <- input @(Tagged Refresh TokenEndpoint)
+    return ()
 
 runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => InterpreterFor (Input (Tagged Refresh TokenEndpoint)) r
 runUseRefreshTokens = interpret $ \case

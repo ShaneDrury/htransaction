@@ -225,7 +225,7 @@ retryOnUnauthorized ::
   (Members
     '[ Logger,
        FaM TransactionsEndpoint,
-       Input (Tagged Refresh TokenEndpoint),
+       ValidTokenM,
        Error HttpException
      ]
     r
@@ -240,7 +240,7 @@ retryOnUnauthorized =
           case r of
             Left Unauthorized -> do
               err "Unauthorized"
-              input @(Tagged Refresh TokenEndpoint)
+              refreshTokens
               getFa endpoint option
             s -> return s
     )
