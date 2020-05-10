@@ -34,7 +34,6 @@ module Transaction
   )
 where
 
-import Control.Lens
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as S
@@ -45,7 +44,6 @@ import Data.Ord
 import Data.Text hiding (null)
 import Data.Time
 import GHC.Generics
-import qualified Network.HTTP.Client as H
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
