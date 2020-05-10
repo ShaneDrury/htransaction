@@ -146,7 +146,7 @@ runValidToken = interpret $ \case
   InvalidateTokens -> do
     oldCfg <- getConfig
     currentTime <- input
-    writeConfig (oldCfg & tokenExpiresAt .~ Just currentTime)
+    writeConfig (oldCfg & tokenExpiresAt ?~ currentTime)
 
 runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case

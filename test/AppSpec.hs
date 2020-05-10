@@ -295,7 +295,7 @@ spec = do
                                  (Info, "Outputting last imported day of 2020-04-20"),
                                  (Info, "Number of transactions: 1")
                                ],
-                               ( [ testConfig & tokenExpiresAt .~ Just testCurrentTime,
+                               ( [ testConfig & tokenExpiresAt ?~ testCurrentTime,
                                    updatedTokenConfig,
                                    updatedLastImportConfig
                                  ],
