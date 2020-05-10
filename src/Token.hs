@@ -163,20 +163,17 @@ runApiTokenM = interpret $ \case
     authorizationCode <- embed getLine
     embed $ getAccessTokenNetwork (config ^. clientID) (config ^. clientSecret) authorizationCode
 
+doSaveTokens :: (Members '[Input UTCTime, ConfigM, ApiTokenM] r) => TokenEndpoint -> Sem r TokenEndpoint
+doSaveTokens tokens = do
+  originalConfig <- getConfig
+  currentTime <- input @UTCTime
+  writeConfig (withNewTokens tokens originalConfig currentTime)
+  return tokens
+
 saveTokens :: (Members '[Input UTCTime, ConfigM, ApiTokenM] r) => Sem r a -> Sem r a
 saveTokens = intercept @ApiTokenM $ \case
-  GetRefreshToken -> do
-    tokens <- getRefreshToken
-    originalConfig <- getConfig
-    currentTime <- input
-    writeConfig (withNewTokens tokens originalConfig currentTime)
-    return tokens
-  GetAccessToken -> do
-    tokens <- getAccessToken
-    originalConfig <- getConfig
-    currentTime <- input
-    writeConfig (withNewTokens tokens originalConfig currentTime)
-    return tokens
+  GetRefreshToken -> getRefreshToken >>= doSaveTokens
+  GetAccessToken -> getAccessToken >>= doSaveTokens
 
 runApiTokenMConst :: TokenEndpoint -> TokenEndpoint -> InterpreterFor ApiTokenM r
 runApiTokenMConst refresh access = interpret $ \case

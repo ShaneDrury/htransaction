@@ -49,8 +49,8 @@ data ApiError = Unauthorized deriving stock (Eq, Show)
 
 data InvalidTokenReason = Expired | Missing deriving stock (Eq, Show)
 
-data InvalidToken = InvalidToken InvalidTokenReason deriving stock (Eq, Show)
-data ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
+newtype InvalidToken = InvalidToken InvalidTokenReason deriving stock (Eq, Show)
+newtype ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
 
 runOutputOnLog :: (Members '[Embed IO] r) => Bool -> InterpreterFor Trace r
 runOutputOnLog verbose = interpret $ \case
