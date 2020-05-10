@@ -15,7 +15,6 @@ import Control.Lens
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
-import Data.Tagged
 import Data.Time
 import qualified Network.HTTP.Req as H
 import Polysemy
@@ -75,25 +74,23 @@ testConfig =
       _tokenExpiresAt = testTokenExpiresAt
     }
 
-refreshTokenEndpoint :: Tagged Refresh TokenEndpoint
+refreshTokenEndpoint :: TokenEndpoint
 refreshTokenEndpoint =
-  Tagged @Refresh $
-    TokenEndpoint
-      { access_token = "accessTokenRefresh",
-        token_type = "foo",
-        expires_in = 86400,
-        refresh_token = Just "refreshTokenRefresh"
-      }
+  TokenEndpoint
+    { access_token = "accessTokenRefresh",
+      token_type = "foo",
+      expires_in = 86400,
+      refresh_token = Just "refreshTokenRefresh"
+    }
 
-accessTokenEndpoint :: Tagged AccessToken TokenEndpoint
+accessTokenEndpoint :: TokenEndpoint
 accessTokenEndpoint =
-  Tagged @AccessToken $
-    TokenEndpoint
-      { access_token = "accessTokenAccess",
-        token_type = "foo",
-        expires_in = 86400,
-        refresh_token = Just "refreshTokenAccess"
-      }
+  TokenEndpoint
+    { access_token = "accessTokenAccess",
+      token_type = "foo",
+      expires_in = 86400,
+      refresh_token = Just "refreshTokenAccess"
+    }
 
 transactionsEndpoint :: [Transaction] -> TransactionsEndpoint
 transactionsEndpoint tx =
@@ -138,8 +135,7 @@ runAppDeep ::
        Input UTCTime,
        ShowTransactionsM,
        Input (Maybe (Maybe [Transaction])),
-       Input (Tagged AccessToken TokenEndpoint),
-       Input (Tagged Refresh TokenEndpoint),
+       ApiTokenM,
        PersistLastImportedM,
        GetLastImportedM,
        BankAccountsM,
@@ -163,13 +159,11 @@ runAppDeep tx config =
     . runBankAccountsMOnConfig
     . runLastImportedManager 1
     . runPersistLastImportedM 1
-    . runInputConst refreshTokenEndpoint
-    . runInputConst accessTokenEndpoint
+    . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
     . runInputList tx
     . runShowTransactionsMOnList
     . runInputConst testCurrentTime
-    . runSaveRefreshTokens
-    . runSaveAccessTokens
+    . saveTokens
     . runGetToken
     . runValidToken
     . runFaMTest
@@ -184,11 +178,10 @@ spec = do
     let tokenApp :: (Members '[ValidTokenM] r) => Sem r ValidToken
         tokenApp = getValidToken
     context "happy path" $ do
-      let happyRunner :: Config -> Sem '[ValidTokenM, TokenM, Input UTCTime, ConfigM, Input Config, Input (Tagged Refresh TokenEndpoint), Input (Tagged AccessToken TokenEndpoint)] ValidToken -> ValidToken
+      let happyRunner :: Config -> Sem '[ValidTokenM, TokenM, Input UTCTime, ConfigM, Input Config, ApiTokenM] ValidToken -> ValidToken
           happyRunner config =
             run
-              . runInputConst accessTokenEndpoint
-              . runInputConst refreshTokenEndpoint
+              . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
               . runInputConst config
               . evalState config
               . runConfigM

@@ -32,11 +32,9 @@ runapp Args {..} =
     . runBankAccountsMOnConfig
     . runLastImportedManager bankAccountId
     . runPersistLastImportedM bankAccountId
-    . runUseRefreshTokens
-    . runGetAccessTokens
+    . runApiTokenM
     . runGetTime
-    . runSaveRefreshTokens
-    . runSaveAccessTokens
+    . saveTokens
     . runGetToken
     . runValidToken
     . runFaM

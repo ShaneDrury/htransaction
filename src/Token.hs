@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -15,19 +16,17 @@
 
 module Token
   ( runValidToken,
-    runUseRefreshTokens,
-    runSaveRefreshTokens,
-    runSaveAccessTokens,
-    runGetAccessTokens,
+    saveTokens,
     runGetTime,
-    Refresh,
-    AccessToken,
     TokenEndpoint (..),
     runGetToken,
     ValidTokenM (..),
     getValidToken,
     TokenM,
     refreshTokens,
+    runApiTokenM,
+    ApiTokenM,
+    runApiTokenMConst,
   )
 where
 
@@ -36,7 +35,6 @@ import Control.Lens
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
 import Data.Maybe
-import Data.Tagged
 import Data.Text
 import Data.Time
 import GHC.Generics
@@ -58,13 +56,9 @@ data TokenM m a where
 
 $(makeSem ''TokenM)
 
-runGetToken :: Members '[Input UTCTime, ConfigM, Input (Tagged Refresh TokenEndpoint)] r => InterpreterFor TokenM r
+runGetToken :: Members '[Input UTCTime, ConfigM] r => InterpreterFor TokenM r
 runGetToken = interpret $ \case
-  GetToken -> configToken <$> getConfig <*> input
-
-data Refresh
-
-data AccessToken
+  GetToken -> configToken <$> getConfig <*> input @UTCTime
 
 data TokenEndpoint
   = TokenEndpoint
@@ -74,6 +68,12 @@ data TokenEndpoint
         refresh_token :: Maybe String
       }
   deriving (Eq, Generic, Show, FromJSON)
+
+data ApiTokenM m a where
+  GetRefreshToken :: ApiTokenM m TokenEndpoint
+  GetAccessToken :: ApiTokenM m TokenEndpoint
+
+$(makeSem ''ApiTokenM)
 
 withNewTokens :: TokenEndpoint -> Config -> UTCTime -> Config
 withNewTokens TokenEndpoint {..} original currentTime =
@@ -91,7 +91,7 @@ withNewTokens TokenEndpoint {..} original currentTime =
               _tokenExpiresAt = expiresAt
             }
 
-getAccessTokenNetwork :: String -> String -> String -> IO (Tagged AccessToken TokenEndpoint)
+getAccessTokenNetwork :: String -> String -> String -> IO TokenEndpoint
 getAccessTokenNetwork cID secret authorizationCode = runReq defaultHttpConfig $ do
   r <-
     req
@@ -109,9 +109,9 @@ getAccessTokenNetwork cID secret authorizationCode = runReq defaultHttpConfig $ 
       ( header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
       )
   let body = responseBody r :: TokenEndpoint
-  return $ Tagged @AccessToken body
+  return body
 
-useRefreshToken :: String -> String -> String -> IO (Tagged Refresh TokenEndpoint)
+useRefreshToken :: String -> String -> String -> IO TokenEndpoint
 useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
   r <-
     req
@@ -127,61 +127,58 @@ useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
       ( header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
       )
   let body = responseBody r :: TokenEndpoint
-  return $ Tagged @Refresh body
+  return body
 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
 
-toValidToken :: Tagged b TokenEndpoint -> ValidToken
-toValidToken tagged = ValidToken $ BS.pack $ access_token (unTagged tagged)
+toValidToken :: TokenEndpoint -> ValidToken
+toValidToken endpoint = ValidToken $ BS.pack $ access_token endpoint
 
-runValidToken :: (Members '[Input (Tagged AccessToken TokenEndpoint), Input (Tagged Refresh TokenEndpoint), TokenM] r) => InterpreterFor ValidTokenM r
+runValidToken :: (Members '[ApiTokenM, TokenM] r) => InterpreterFor ValidTokenM r
 runValidToken = interpret $ \case
   GetValidToken -> do
     eValidToken <- getToken
     case eValidToken of
-      Left (InvalidToken Missing) -> toValidToken <$> input @(Tagged AccessToken TokenEndpoint)
-      Left (InvalidToken Expired) -> toValidToken <$> input @(Tagged Refresh TokenEndpoint)
+      Left (InvalidToken Missing) -> toValidToken <$> getAccessToken
+      Left (InvalidToken Expired) -> toValidToken <$> getRefreshToken
       Right (ValidToken validToken) -> return $ ValidToken validToken
   RefreshTokens -> do
-    _ <- input @(Tagged Refresh TokenEndpoint)
+    _ <- getRefreshToken
     return ()
-
-runUseRefreshTokens :: (Members '[Embed IO, ConfigM, Logger] r) => InterpreterFor (Input (Tagged Refresh TokenEndpoint)) r
-runUseRefreshTokens = interpret $ \case
-  Input -> do
-    config <- getConfig
-    warn "Trying to refresh tokens"
-    embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
 
 runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
-runSaveRefreshTokens :: (Members '[Input UTCTime, ConfigM, Input (Tagged Refresh TokenEndpoint)] r) => Sem r a -> Sem r a
-runSaveRefreshTokens = intercept @(Input (Tagged Refresh TokenEndpoint)) $ \case
-  Input -> do
-    taggedTokens <- input @(Tagged Refresh TokenEndpoint)
-    let tokens = unTagged taggedTokens
-    originalConfig <- getConfig
-    currentTime <- input
-    writeConfig (withNewTokens tokens originalConfig currentTime)
-    return taggedTokens
-
-runSaveAccessTokens :: (Members '[Input UTCTime, ConfigM, Input (Tagged AccessToken TokenEndpoint)] r) => Sem r a -> Sem r a
-runSaveAccessTokens = intercept @(Input (Tagged AccessToken TokenEndpoint)) $ \case
-  Input -> do
-    taggedTokens <- input @(Tagged AccessToken TokenEndpoint)
-    let tokens = unTagged taggedTokens
-    originalConfig <- getConfig
-    currentTime <- input
-    writeConfig (withNewTokens tokens originalConfig currentTime)
-    return taggedTokens
-
-runGetAccessTokens :: (Members '[Embed IO, ConfigM] r) => InterpreterFor (Input (Tagged AccessToken TokenEndpoint)) r
-runGetAccessTokens = interpret $ \case
-  Input -> do
+runApiTokenM :: (Members '[Embed IO, ConfigM, Logger] r) => InterpreterFor ApiTokenM r
+runApiTokenM = interpret $ \case
+  GetRefreshToken -> do
+    config <- getConfig
+    warn "Trying to refresh tokens"
+    embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
+  GetAccessToken -> do
     config <- getConfig
     embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
     authorizationCode <- embed getLine
     embed $ getAccessTokenNetwork (config ^. clientID) (config ^. clientSecret) authorizationCode
+
+saveTokens :: (Members '[Input UTCTime, ConfigM, ApiTokenM] r) => Sem r a -> Sem r a
+saveTokens = intercept @ApiTokenM $ \case
+  GetRefreshToken -> do
+    tokens <- getRefreshToken
+    originalConfig <- getConfig
+    currentTime <- input
+    writeConfig (withNewTokens tokens originalConfig currentTime)
+    return tokens
+  GetAccessToken -> do
+    tokens <- getAccessToken
+    originalConfig <- getConfig
+    currentTime <- input
+    writeConfig (withNewTokens tokens originalConfig currentTime)
+    return tokens
+
+runApiTokenMConst :: TokenEndpoint -> TokenEndpoint -> InterpreterFor ApiTokenM r
+runApiTokenMConst refresh access = interpret $ \case
+  GetRefreshToken -> return refresh
+  GetAccessToken -> return access
