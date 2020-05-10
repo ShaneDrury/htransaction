@@ -240,7 +240,7 @@ retryOnUnauthorized =
           case r of
             Left Unauthorized -> do
               err "Unauthorized"
-              refreshTokens
+              invalidateTokens
               getFa endpoint option
             s -> return s
     )

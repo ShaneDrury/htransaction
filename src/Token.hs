@@ -1,4 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -8,6 +7,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -23,7 +23,7 @@ module Token
     ValidTokenM (..),
     getValidToken,
     TokenM,
-    refreshTokens,
+    invalidateTokens,
     runApiTokenM,
     ApiTokenM,
     runApiTokenMConst,
@@ -47,7 +47,7 @@ import Prelude
 
 data ValidTokenM m a where
   GetValidToken :: ValidTokenM m ValidToken
-  RefreshTokens :: ValidTokenM m ()
+  InvalidateTokens :: ValidTokenM m ()
 
 $(makeSem ''ValidTokenM)
 
@@ -135,7 +135,7 @@ authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=
 toValidToken :: TokenEndpoint -> ValidToken
 toValidToken endpoint = ValidToken $ BS.pack $ access_token endpoint
 
-runValidToken :: (Members '[ApiTokenM, TokenM] r) => InterpreterFor ValidTokenM r
+runValidToken :: (Members '[ApiTokenM, TokenM, ConfigM, Input UTCTime] r) => InterpreterFor ValidTokenM r
 runValidToken = interpret $ \case
   GetValidToken -> do
     eValidToken <- getToken
@@ -143,9 +143,10 @@ runValidToken = interpret $ \case
       Left (InvalidToken Missing) -> toValidToken <$> getAccessToken
       Left (InvalidToken Expired) -> toValidToken <$> getRefreshToken
       Right (ValidToken validToken) -> return $ ValidToken validToken
-  RefreshTokens -> do
-    _ <- getRefreshToken
-    return ()
+  InvalidateTokens -> do
+    oldCfg <- getConfig
+    currentTime <- input
+    writeConfig (oldCfg & tokenExpiresAt .~ Just currentTime)
 
 runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case
