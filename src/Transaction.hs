@@ -225,8 +225,7 @@ retryOnUnauthorized ::
   (Members
     '[ Logger,
        FaM TransactionsEndpoint,
-       ValidTokenM,
-       Error HttpException
+       ValidTokenM
      ]
     r
     ) =>
