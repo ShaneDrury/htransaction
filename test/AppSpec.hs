@@ -9,6 +9,7 @@ module AppSpec
   )
 where
 
+import Api
 import App (app)
 import Config
 import Control.Lens

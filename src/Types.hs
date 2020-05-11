@@ -25,6 +25,9 @@ module Types
     InvalidToken (..),
     ValidToken (..),
     InvalidTokenReason (..),
+    Transaction (..),
+    TransactionsEndpoint (..),
+    TransactionDate (..),
   )
 where
 
@@ -42,6 +45,8 @@ import Polysemy.Output
 import Polysemy.Trace
 import Rainbow
 import Prelude hiding (log)
+import qualified Data.Csv as CSV
+import Data.Coerce
 
 newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
@@ -98,3 +103,22 @@ runLoggerAsOutput =
   reinterpret
     ( \(Log logmsg) -> output logmsg
     )
+
+newtype TransactionDate = TransactionDate Day deriving stock (Eq, Show, Generic) deriving anyclass (FromJSON, ToJSON)
+
+instance CSV.ToField TransactionDate where
+  toField (TransactionDate d) = BS.pack $ showGregorian d
+
+data Transaction
+  = Transaction
+      { dated_on :: TransactionDate,
+        description :: String,
+        amount :: String
+      }
+  deriving stock (Eq, Generic, Show) deriving anyclass (FromJSON, CSV.ToRecord, ToJSON)
+
+newtype TransactionsEndpoint
+  = TransactionsEndpoint
+      { bank_transactions :: [Transaction]
+      }
+  deriving stock (Eq, Generic, Show) deriving anyclass (FromJSON, ToJSON)
