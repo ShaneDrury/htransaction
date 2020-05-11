@@ -1,26 +1,25 @@
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
-
+{-# LANGUAGE TypeApplications #-}
 
 module Main
   ( main,
   )
 where
 
+import Api
 import App
 import Cli
-import Control.Monad
-import Polysemy
 import Config
+import Control.Monad
+import Fa
+import Polysemy
 import Polysemy.Config
 import Polysemy.LastImported
 import Token
 import Transaction
 import Types
 import Prelude
-import Api
-import Fa
 
 runapp Args {..} =
   runM

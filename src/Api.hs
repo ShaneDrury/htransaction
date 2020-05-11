@@ -12,7 +12,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Api
   ( TransactionsApiM (..),
@@ -22,14 +21,14 @@ module Api
 where
 
 import Control.Monad
-import Data.Time
 import Data.Text
+import Data.Time
+import Fa
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
 import Types
 import Prelude hiding (log)
-import Fa
 
 data TransactionsApiM m a where
   GetTransactionsApi :: Int -> Day -> TransactionsApiM m [Transaction]

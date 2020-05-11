@@ -32,6 +32,8 @@ module Transaction
   )
 where
 
+import Api
+import Control.Monad
 import qualified Data.ByteString.Lazy.Char8 as S
 import Data.Coerce
 import qualified Data.Csv as CSV
@@ -39,12 +41,10 @@ import Data.List
 import Data.Ord
 import Data.Time
 import Polysemy
-import Polysemy.Output
 import Polysemy.LastImported
+import Polysemy.Output
 import Types
-import Control.Monad
 import Prelude hiding (log)
-import Api
 
 data ShowTransactionsM m a where
   ShowTransactions :: [Transaction] -> ShowTransactionsM m ()
@@ -63,8 +63,7 @@ $(makeSem ''NextTransactionsM)
 
 runTransactionsManager ::
   ( Members
-      '[ 
-         TransactionsApiM
+      '[ TransactionsApiM
        ]
       r
   ) =>
@@ -100,10 +99,10 @@ runShowTransactionsMEmpty = interpret $ \case
 runShowTransactionsMOnList :: Sem (ShowTransactionsM : r) a -> Sem r ([[Transaction]], a)
 runShowTransactionsMOnList =
   runOutputList @[Transaction]
-  . reinterpret (
-    \case
-      ShowTransactions tx -> output tx
-    )
+    . reinterpret
+      ( \case
+          ShowTransactions tx -> output tx
+      )
 
 runNextTransactionsMOnLastImported :: (Members '[TransactionsManager, GetLastImportedM, PersistLastImportedM, Logger] r) => InterpreterFor NextTransactionsM r
 runNextTransactionsMOnLastImported = interpret $ \case

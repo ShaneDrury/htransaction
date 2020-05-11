@@ -35,6 +35,8 @@ import Colog.Polysemy.Effect
 import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
+import Data.Coerce
+import qualified Data.Csv as CSV
 import qualified Data.Text as T
 import Data.Time
 import GHC.Generics
@@ -45,8 +47,6 @@ import Polysemy.Output
 import Polysemy.Trace
 import Rainbow
 import Prelude hiding (log)
-import qualified Data.Csv as CSV
-import Data.Coerce
 
 newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
 
@@ -55,6 +55,7 @@ data ApiError = Unauthorized deriving stock (Eq, Show)
 data InvalidTokenReason = Expired | Missing deriving stock (Eq, Show)
 
 newtype InvalidToken = InvalidToken InvalidTokenReason deriving stock (Eq, Show)
+
 newtype ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
 
 runOutputOnLog :: (Members '[Embed IO] r) => Bool -> InterpreterFor Trace r
@@ -104,7 +105,8 @@ runLoggerAsOutput =
     ( \(Log logmsg) -> output logmsg
     )
 
-newtype TransactionDate = TransactionDate Day deriving stock (Eq, Show, Generic) deriving anyclass (FromJSON, ToJSON)
+newtype TransactionDate = TransactionDate Day deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
 
 instance CSV.ToField TransactionDate where
   toField (TransactionDate d) = BS.pack $ showGregorian d
@@ -115,10 +117,12 @@ data Transaction
         description :: String,
         amount :: String
       }
-  deriving stock (Eq, Generic, Show) deriving anyclass (FromJSON, CSV.ToRecord, ToJSON)
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, CSV.ToRecord, ToJSON)
 
 newtype TransactionsEndpoint
   = TransactionsEndpoint
       { bank_transactions :: [Transaction]
       }
-  deriving stock (Eq, Generic, Show) deriving anyclass (FromJSON, ToJSON)
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
