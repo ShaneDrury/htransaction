@@ -35,7 +35,6 @@ import Colog.Polysemy.Effect
 import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
-import Data.Coerce
 import qualified Data.Csv as CSV
 import qualified Data.Text as T
 import Data.Time
@@ -48,7 +47,8 @@ import Polysemy.Trace
 import Rainbow
 import Prelude hiding (log)
 
-newtype LastImported = LastImported Day deriving (Eq, Show, Generic, FromJSON, ToJSON)
+newtype LastImported = LastImported Day deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
 
 data ApiError = Unauthorized deriving stock (Eq, Show)
 
@@ -65,7 +65,7 @@ runOutputOnLog verbose = interpret $ \case
 data AppError
   = HttpError H.HttpException
   | AppApiError ApiError
-  deriving (Show)
+  deriving stock (Show)
 
 handleErrors :: Sem (Error H.HttpException : Error ApiError : Error AppError : r) a -> Sem r (Either AppError a)
 handleErrors =
@@ -105,7 +105,8 @@ runLoggerAsOutput =
     ( \(Log logmsg) -> output logmsg
     )
 
-newtype TransactionDate = TransactionDate Day deriving stock (Eq, Show, Generic)
+newtype TransactionDate = TransactionDate Day
+  deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON)
 
 instance CSV.ToField TransactionDate where
