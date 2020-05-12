@@ -35,11 +35,11 @@ import Control.Lens
 import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as S
+import Logger
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.State
-import Types
 import Prelude
 
 data ConfigM m a where

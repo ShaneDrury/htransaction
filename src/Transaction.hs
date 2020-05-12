@@ -40,6 +40,7 @@ import qualified Data.Csv as CSV
 import Data.List
 import Data.Ord
 import Data.Time
+import Logger
 import Polysemy
 import Polysemy.LastImported
 import Polysemy.Output

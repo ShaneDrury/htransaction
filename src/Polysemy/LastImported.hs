@@ -27,6 +27,7 @@ import Config
 import Control.Monad
 import qualified Data.Map as Map
 import Data.Time
+import Logger
 import Polysemy
 import Polysemy.Config
 import Polysemy.Output

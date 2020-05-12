@@ -27,6 +27,7 @@ import Control.Lens
 import Control.Monad
 import Data.Aeson
 import Data.Text
+import Logger
 import qualified Network.HTTP.Client as H
 import Network.HTTP.Req
 import qualified Network.HTTP.Types.Status as Status

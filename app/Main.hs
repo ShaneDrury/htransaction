@@ -13,6 +13,7 @@ import Cli
 import Config
 import Control.Monad
 import Fa
+import Logger
 import Polysemy
 import Polysemy.Config
 import Polysemy.LastImported

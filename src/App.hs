@@ -6,9 +6,9 @@ module App
 where
 
 import Control.Monad
+import Logger
 import Polysemy
 import Transaction
-import Types
 import Prelude hiding (log)
 
 app :: (Members '[NextTransactionsM, ShowTransactionsM, Logger] r) => Sem r ()

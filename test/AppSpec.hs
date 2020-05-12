@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import Data.Time
 import Fa
+import Logger
 import qualified Network.HTTP.Req as H
 import Polysemy
 import Polysemy.Config

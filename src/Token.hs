@@ -38,6 +38,7 @@ import Data.Maybe
 import Data.Text
 import Data.Time
 import GHC.Generics
+import Logger
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Config
