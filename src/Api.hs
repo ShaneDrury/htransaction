@@ -17,13 +17,16 @@ module Api
   ( TransactionsApiM (..),
     getTransactionsApi,
     runTransactionsApiM,
+    TransactionsEndpoint (..),
   )
 where
 
 import Control.Monad
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Text
 import Data.Time
 import Fa
+import GHC.Generics (Generic)
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
@@ -34,6 +37,13 @@ data TransactionsApiM m a where
   GetTransactionsApi :: Int -> Day -> TransactionsApiM m [Transaction]
 
 $(makeSem ''TransactionsApiM)
+
+newtype TransactionsEndpoint
+  = TransactionsEndpoint
+      { bank_transactions :: [Transaction]
+      }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
 
 runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, Error ApiError] r) => InterpreterFor TransactionsApiM r
 runTransactionsApiM = interpret $ \case

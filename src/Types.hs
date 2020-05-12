@@ -16,7 +16,6 @@ module Types
     ValidToken (..),
     InvalidTokenReason (..),
     Transaction (..),
-    TransactionsEndpoint (..),
     TransactionDate (..),
   )
 where
@@ -69,10 +68,3 @@ data Transaction
       }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, CSV.ToRecord, ToJSON)
-
-newtype TransactionsEndpoint
-  = TransactionsEndpoint
-      { bank_transactions :: [Transaction]
-      }
-  deriving stock (Eq, Generic, Show)
-  deriving anyclass (FromJSON, ToJSON)

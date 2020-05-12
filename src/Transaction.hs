@@ -21,7 +21,6 @@ module Transaction
     TransactionsManager (..),
     getTransactions,
     runTransactionsManager,
-    TransactionsEndpoint (..),
     NextTransactionsM (..),
     getNextTransactions,
     ShowTransactionsM,
