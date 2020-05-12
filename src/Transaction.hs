@@ -76,7 +76,7 @@ toDay :: TransactionDate -> Day
 toDay = coerce
 
 latestTransaction :: [Transaction] -> Day
-latestTransaction tx = toDay . dated_on $ maximumBy (comparing (toDay . dated_on)) tx
+latestTransaction = toDay . dated_on . maximumBy (comparing dated_on)
 
 runOutputOnCsv ::
   ( Members

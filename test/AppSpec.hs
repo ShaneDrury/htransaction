@@ -106,6 +106,11 @@ testTransactions =
       { dated_on = TransactionDate $ fromGregorian 2020 4 20,
         description = "Foo",
         amount = "123.0"
+      },
+    Transaction
+      { dated_on = TransactionDate $ fromGregorian 2020 4 21,
+        description = "Bar",
+        amount = "456.0"
       }
   ]
 
@@ -203,10 +208,10 @@ spec = do
       $ it "imports nothing"
       $ runAppEmpty app `shouldBe` ([(Info, "Number of transactions: 0")], ())
     context "happy, simple path"
-      $ context "with one transaction"
-      $ it "imports 1 transaction"
+      $ context "with two transactions"
+      $ it "imports them"
       $ runAppSimple testTransactions app
-        `shouldBe` ( [(Info, "Number of transactions: 1")],
+        `shouldBe` ( [(Info, "Number of transactions: 2")],
                      ( [ testTransactions
                        ],
                        ()
@@ -237,10 +242,10 @@ spec = do
           Right r ->
             r
               `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
-                             (Info, "Outputting last imported day of 2020-04-20"),
-                             (Info, "Number of transactions: 1")
+                             (Info, "Outputting last imported day of 2020-04-21"),
+                             (Info, "Number of transactions: 2")
                            ],
-                           ( [ updateConfig 1 (LastImported $ fromGregorian 2020 4 20) testConfig
+                           ( [ updateConfig 1 (LastImported $ fromGregorian 2020 4 21) testConfig
                              ],
                              ( [ testTransactions
                                ],
@@ -266,11 +271,11 @@ spec = do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
                   tokenExpiresAt .= Just (addUTCTime (secondsToNominalDiffTime 86400) testCurrentTime)
-                updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 20)
+                updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
-                                 (Info, "Outputting last imported day of 2020-04-20"),
-                                 (Info, "Number of transactions: 1")
+                                 (Info, "Outputting last imported day of 2020-04-21"),
+                                 (Info, "Number of transactions: 2")
                                ],
                                ( [ updatedTokenConfig,
                                    updatedLastImportConfig
@@ -289,12 +294,12 @@ spec = do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
                   tokenExpiresAt .= Just (addUTCTime (secondsToNominalDiffTime 86400) testCurrentTime)
-                updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 20)
+                updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),
-                                 (Info, "Outputting last imported day of 2020-04-20"),
-                                 (Info, "Number of transactions: 1")
+                                 (Info, "Outputting last imported day of 2020-04-21"),
+                                 (Info, "Number of transactions: 2")
                                ],
                                ( [ testConfig & tokenExpiresAt ?~ testCurrentTime,
                                    updatedTokenConfig,

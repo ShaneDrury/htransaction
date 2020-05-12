@@ -47,7 +47,8 @@ import Polysemy.Trace
 import Rainbow
 import Prelude hiding (log)
 
-newtype LastImported = LastImported Day deriving stock (Eq, Show, Generic)
+newtype LastImported = LastImported Day
+  deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON)
 
 data ApiError = Unauthorized deriving stock (Eq, Show)
@@ -106,7 +107,7 @@ runLoggerAsOutput =
     )
 
 newtype TransactionDate = TransactionDate Day
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Show, Generic, Ord)
   deriving anyclass (FromJSON, ToJSON)
 
 instance CSV.ToField TransactionDate where
