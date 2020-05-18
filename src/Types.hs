@@ -12,7 +12,6 @@ module Types
     handleErrors,
     AppError (..),
     ApiError (..),
-    InvalidToken (..),
     ValidToken (..),
     InvalidTokenReason (..),
     Transaction (..),
@@ -37,8 +36,6 @@ newtype LastImported = LastImported Day
 data ApiError = Unauthorized deriving stock (Eq, Show)
 
 data InvalidTokenReason = Expired | Missing deriving stock (Eq, Show)
-
-newtype InvalidToken = InvalidToken InvalidTokenReason deriving stock (Eq, Show)
 
 newtype ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
 

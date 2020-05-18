@@ -53,7 +53,7 @@ data ValidTokenM m a where
 $(makeSem ''ValidTokenM)
 
 data TokenM m a where
-  GetToken :: TokenM m (Either InvalidToken ValidToken)
+  GetToken :: TokenM m (Either InvalidTokenReason ValidToken)
 
 $(makeSem ''TokenM)
 
@@ -141,8 +141,8 @@ runValidToken = interpret $ \case
   GetValidToken -> do
     eValidToken <- getToken
     case eValidToken of
-      Left (InvalidToken Missing) -> toValidToken <$> getAccessToken
-      Left (InvalidToken Expired) -> toValidToken <$> getRefreshToken
+      Left Missing -> toValidToken <$> getAccessToken
+      Left Expired -> toValidToken <$> getRefreshToken
       Right (ValidToken validToken) -> return $ ValidToken validToken
   InvalidateTokens -> do
     oldCfg <- getConfig
