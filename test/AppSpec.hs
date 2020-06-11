@@ -271,7 +271,7 @@ spec = do
             let updatedTokenConfig = testConfig &~ do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
-                  tokenExpiresAt .= Just (addUTCTime (secondsToNominalDiffTime 86400) testCurrentTime)
+                  tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
                 updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
@@ -294,7 +294,8 @@ spec = do
             let updatedTokenConfig = testConfig &~ do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
-                  tokenExpiresAt .= Just (addUTCTime (secondsToNominalDiffTime 86400) testCurrentTime)
+                  tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime
+                                                     ) testCurrentTime)
                 updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
