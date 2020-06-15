@@ -35,5 +35,6 @@ let
 
 in
 {
+  project = haskell.project;
   env = env;
   }
