@@ -20,7 +20,20 @@ let
   };
 
   pkgs = import <nixpkgs> { inherit config; };
+  packages = pkgs.haskell.packages;
+  haskell = packages.${compiler};
+  env = haskell.project.env.overrideAttrs (
+    old: with haskell; {
+      nativeBuildInputs = old.nativeBuildInputs ++ [
+        hlint
+        ormolu
+        brittany
+        ghcide
+      ];
+    }
+  );
 
 in
-  { project = pkgs.haskell.packages.${compiler}.project;
+{
+  env = env;
   }
