@@ -20,6 +20,7 @@ let
   };
 
   pkgs = import <nixpkgs> { inherit config; };
+  unstablepkgs = import <nixos-unstable> { inherit config; };
   packages = pkgs.haskell.packages;
   haskell = packages.${compiler};
   env = haskell.project.env.overrideAttrs (
@@ -28,13 +29,15 @@ let
         hlint
         ormolu
         brittany
-        ghcide
+        unstablepkgs.haskell.packages.${compiler}.ghcide
+        cabal-install
       ];
     }
   );
 
 in
 {
+  haskell = haskell;
   project = haskell.project;
   env = env;
   }

@@ -1,0 +1,13 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:htransaction"
+    - path: "./app"
+      component: "htransaction-exe"
+    - path: "./test"
+      component: "test:htransaction-test"
+dependencies:
+  - package.yaml
+  - shell.nix
+  - project.nix
+  - default.nix
