@@ -1,3 +1,5 @@
 .stack-work/
 htransaction.cabal
 *~
+dist-newstyle/
+result
