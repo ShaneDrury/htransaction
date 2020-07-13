@@ -69,8 +69,13 @@ testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "202
 testConfig :: Config
 testConfig =
   Config
-    { _bankAccounts = Map.fromList [(1, LastImported $ fromGregorian 2020 4 19)],
-      _token = Just "token",
+    { _bankAccounts = Map.fromList [(1, LastImported $ fromGregorian 2020 4 19)]
+    }
+
+testTokens :: Tokens
+testTokens =
+  Tokens
+    { _token = Just "token",
       _refreshToken = Just "refreshToken",
       _clientID = "clientID",
       _clientSecret = "secret",
@@ -133,6 +138,7 @@ runFaMTest =
 runAppDeep ::
   [Maybe [Transaction]] ->
   Config ->
+  Tokens ->
   Sem
     '[ NextTransactionsM,
        TransactionsManager,
@@ -141,6 +147,7 @@ runAppDeep ::
        ValidTokenM,
        TokenM,
        Input UTCTime,
+       TokensM,
        ShowTransactionsM,
        Input (Maybe (Maybe [Transaction])),
        ApiTokenM,
@@ -154,8 +161,8 @@ runAppDeep ::
        Error AppError
      ]
     a ->
-  Either AppError ([LogMsg], ([Config], ([[Transaction]], a)))
-runAppDeep tx config =
+  Either AppError ([LogMsg], ([Config], ([[Transaction]], ([Tokens], a))))
+runAppDeep tx config tokens =
   run
     . handleErrors
     . runOutputList @LogMsg
@@ -170,6 +177,10 @@ runAppDeep tx config =
     . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
     . runInputList tx
     . runShowTransactionsMOnList
+    . runInputConst tokens
+    . runOutputList @Tokens
+    . runStateCached @Tokens
+    . runTokensM
     . runInputConst testCurrentTime
     . saveTokens
     . runGetToken
@@ -186,24 +197,41 @@ spec = do
     let tokenApp :: (Members '[ValidTokenM] r) => Sem r ValidToken
         tokenApp = getValidToken
     context "happy path" $ do
-      let happyRunner :: Config -> Sem '[ValidTokenM, TokenM, Input UTCTime, ConfigM, Input Config, ApiTokenM] ValidToken -> ValidToken
-          happyRunner config =
+      let happyRunner ::
+            Config ->
+            Tokens ->
+            Sem
+              '[ ValidTokenM,
+                 TokenM,
+                 Input UTCTime,
+                 TokensM,
+                 Input Tokens,
+                 ConfigM,
+                 Input Config,
+                 ApiTokenM
+               ]
+              ValidToken ->
+            ValidToken
+          happyRunner config tokens =
             run
               . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
               . runInputConst config
               . evalState config
               . runConfigM
+              . runInputConst tokens
+              . evalState tokens
+              . runTokensM
               . runInputConst testCurrentTime
               . runGetToken
               . runValidToken
       it "uses the config token if not expired" $
-        happyRunner testConfig tokenApp `shouldBe` ValidToken (BS.pack "token")
+        happyRunner testConfig testTokens tokenApp `shouldBe` ValidToken (BS.pack "token")
       it "uses the refresh token if expired" $
-        happyRunner (testConfig & tokenExpiresAt .~ expiredTokenTime) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenRefresh")
+        happyRunner testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenRefresh")
       it "uses the access token if tokenExpiresAt is not set" $
-        happyRunner (testConfig & tokenExpiresAt .~ Nothing) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenAccess")
+        happyRunner testConfig (testTokens & tokenExpiresAt .~ Nothing) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenAccess")
       it "uses the access token if token not present in config" $
-        happyRunner (testConfig & token .~ Nothing) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenAccess")
+        happyRunner testConfig (testTokens & token .~ Nothing) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenAccess")
   describe "app" $ do
     context "empty path"
       $ it "imports nothing"
@@ -238,7 +266,7 @@ spec = do
                      )
     context "happy, deep path" $ do
       it "imports transactions, outputs them, updates config" $
-        case runAppDeep [Just testTransactions] testConfig app of
+        case runAppDeep [Just testTransactions] testConfig testTokens app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -246,70 +274,77 @@ spec = do
                              (Info, "Outputting last imported day of 2020-04-21"),
                              (Info, "Number of transactions: 2")
                            ],
-                           ( [ updateConfig 1 (LastImported $ fromGregorian 2020 4 21) testConfig
-                             ],
+                           ( [updateConfig 1 (LastImported $ fromGregorian 2020 4 21) testConfig],
                              ( [ testTransactions
                                ],
-                               ()
+                               ( [],
+                                 ()
+                               )
                              )
                            )
                          )
       it "imports 0 transactions" $
-        case runAppDeep [Just []] testConfig app of
+        case runAppDeep [Just []] testConfig testTokens app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
               `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                              (Info, "Number of transactions: 0")
                            ],
-                           ([], ([[]], ()))
+                           ([], ([[]], ([], ())))
                          )
       it "tries to refresh tokens if needed" $
-        case runAppDeep [Just testTransactions] (testConfig & tokenExpiresAt .~ expiredTokenTime) app of
+        case runAppDeep [Just testTransactions] testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
-            let updatedTokenConfig = testConfig &~ do
+            let updatedTokenConfig = testTokens &~ do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
                   tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
-                updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
+                updatedLastImportConfig = testConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (Info, "Outputting last imported day of 2020-04-21"),
                                  (Info, "Number of transactions: 2")
                                ],
-                               ( [ updatedTokenConfig,
-                                   updatedLastImportConfig
+                               ( [ updatedLastImportConfig
                                  ],
                                  ( [ testTransactions
                                    ],
-                                   ()
+                                   ([updatedTokenConfig], ())
                                  )
                                )
                              )
       it "retries if unauthorized" $
-        case runAppDeep [Nothing, Just testTransactions] testConfig app of
+        case runAppDeep [Nothing, Just testTransactions] testConfig testTokens app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
-            let updatedTokenConfig = testConfig &~ do
+            let updatedTokenConfig = testTokens &~ do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
-                  tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime
-                                                     ) testCurrentTime)
-                updatedLastImportConfig = updatedTokenConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
+                  tokenExpiresAt
+                    .= Just
+                      ( addUTCTime
+                          ( 86400 :: NominalDiffTime
+                          )
+                          testCurrentTime
+                      )
+                updatedLastImportConfig = testConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),
                                  (Info, "Outputting last imported day of 2020-04-21"),
                                  (Info, "Number of transactions: 2")
                                ],
-                               ( [ testConfig & tokenExpiresAt ?~ testCurrentTime,
-                                   updatedTokenConfig,
-                                   updatedLastImportConfig
+                               ( [ updatedLastImportConfig
                                  ],
                                  ( [ testTransactions
                                    ],
-                                   ()
+                                   ( [ testTokens & tokenExpiresAt ?~ testCurrentTime,
+                                       updatedTokenConfig
+                                     ],
+                                     ()
+                                   )
                                  )
                                )
                              )

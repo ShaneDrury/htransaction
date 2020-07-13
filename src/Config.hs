@@ -7,15 +7,9 @@
 
 module Config
   ( Config (..),
-    clientID,
-    clientSecret,
-    token,
-    tokenExpiresAt,
-    refreshToken,
     updateConfig,
     bankAccounts,
     BankAccounts,
-    configToken,
   )
 where
 
@@ -31,14 +25,9 @@ import Prelude
 
 type BankAccounts = Map.Map Int LastImported
 
-data Config
+newtype Config
   = Config
-      { _bankAccounts :: BankAccounts,
-        _token :: Maybe String,
-        _refreshToken :: Maybe String,
-        _clientID :: String,
-        _clientSecret :: String,
-        _tokenExpiresAt :: Maybe UTCTime
+      { _bankAccounts :: BankAccounts
       }
   deriving (Eq, Generic, Show)
 
@@ -48,15 +37,3 @@ $(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
 
 updateConfig :: Int -> LastImported -> Config -> Config
 updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
-
-configToken :: Config -> UTCTime -> Either InvalidTokenReason ValidToken
-configToken config currentTime =
-  case config ^. token of
-    Just t ->
-      case config ^. tokenExpiresAt of
-        Just expires -> do
-          if expires <= currentTime
-            then Left Expired
-            else Right $ ValidToken $ BS.pack t
-        Nothing -> Left Missing
-    Nothing -> Left Missing

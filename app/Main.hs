@@ -31,6 +31,10 @@ runapp Args {..} =
     . runWriteConfig configFile
     . runStateCached @Config
     . runConfigM
+    . runGetTokens tokensFile
+    . runWriteTokens tokensFile
+    . runStateCached @Tokens
+    . runTokensM
     . runBankAccountsMOnConfig
     . runLastImportedManager bankAccountId
     . runPersistLastImportedM bankAccountId

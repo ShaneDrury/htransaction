@@ -16,7 +16,11 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Polysemy.Config
-  ( runGetConfig,
+  ( runApiTokenM,
+    runGetToken,
+    runValidToken,
+    saveTokens,
+    runGetConfig,
     runWriteConfig,
     getConfig,
     writeConfig,
@@ -24,9 +28,12 @@ module Polysemy.Config
     BankAccountsM,
     getBankAccounts,
     runBankAccountsMOnConfig,
+    runTokensM,
     runConfigM,
     runStateCached,
     Cached (..),
+    runWriteTokens,
+    TokensM (..),
   )
 where
 
@@ -35,18 +42,36 @@ import Control.Lens
 import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as S
+import Data.Maybe
+import Data.Text
+import Data.Time
+import GHC.Generics
 import Logger
+import Network.HTTP.Req
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.State
+import Token
+import Types
 import Prelude
+
+data TokensM m a where
+  GetTokens :: TokensM m Tokens
+  WriteTokens :: Tokens -> TokensM m ()
 
 data ConfigM m a where
   GetConfig :: ConfigM m Config
   WriteConfig :: Config -> ConfigM m ()
 
+$(makeSem ''TokensM)
+
 $(makeSem ''ConfigM)
+
+runTokensM :: Sem (TokensM : r) a -> Sem (State Tokens : r) a
+runTokensM = reinterpret $ \case
+  GetTokens -> get @Tokens
+  WriteTokens s -> put @Tokens s
 
 runConfigM :: Sem (ConfigM : r) a -> Sem (State Config : r) a
 runConfigM = reinterpret $ \case
@@ -92,8 +117,55 @@ runGetConfig fp = interpret $ \case
       Left e -> error e
       Right cfg -> return cfg
 
+runWriteTokens :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Output Tokens) r
+runWriteTokens fp = interpret $ \case
+  Output cfg -> do
+    info $ "Writing tokens to " ++ fp
+    embed $ S.writeFile fp (encode cfg)
+
 runWriteConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Output Config) r
 runWriteConfig fp = interpret $ \case
   Output cfg -> do
     info $ "Writing config to " ++ fp
     embed $ S.writeFile fp (encode cfg)
+
+runGetToken :: Members '[Input UTCTime, TokensM] r => InterpreterFor TokenM r
+runGetToken = interpret $ \case
+  GetToken -> configToken <$> getTokens <*> input @UTCTime
+
+runValidToken :: (Members '[ApiTokenM, TokenM, TokensM, Input UTCTime] r) => InterpreterFor ValidTokenM r
+runValidToken = interpret $ \case
+  GetValidToken -> do
+    eValidToken <- getToken
+    case eValidToken of
+      Left Missing -> toValidToken <$> getAccessToken
+      Left Expired -> toValidToken <$> getRefreshToken
+      Right (ValidToken validToken) -> return $ ValidToken validToken
+  InvalidateTokens -> do
+    oldTokens <- getTokens
+    currentTime <- input
+    writeTokens (oldTokens & tokenExpiresAt ?~ currentTime)
+
+runApiTokenM :: (Members '[Embed IO, TokensM, Logger] r) => InterpreterFor ApiTokenM r
+runApiTokenM = interpret $ \case
+  GetRefreshToken -> do
+    config <- getTokens
+    warn "Trying to refresh tokens"
+    embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
+  GetAccessToken -> do
+    config <- getTokens
+    embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
+    authorizationCode <- embed getLine
+    embed $ getAccessTokenNetwork (config ^. clientID) (config ^. clientSecret) authorizationCode
+
+doSaveTokens :: (Members '[Input UTCTime, TokensM, ApiTokenM] r) => TokenEndpoint -> Sem r TokenEndpoint
+doSaveTokens tokens = do
+  originalConfig <- getTokens
+  currentTime <- input @UTCTime
+  writeTokens (withNewTokens tokens originalConfig currentTime)
+  return tokens
+
+saveTokens :: (Members '[Input UTCTime, TokensM, ApiTokenM] r) => Sem r a -> Sem r a
+saveTokens = intercept @ApiTokenM $ \case
+  GetRefreshToken -> getRefreshToken >>= doSaveTokens
+  GetAccessToken -> getAccessToken >>= doSaveTokens

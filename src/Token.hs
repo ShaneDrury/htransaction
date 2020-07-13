@@ -15,24 +15,37 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Token
-  ( runValidToken,
-    saveTokens,
-    runGetTime,
+  ( runGetTime,
     TokenEndpoint (..),
-    runGetToken,
     ValidTokenM (..),
     getValidToken,
-    TokenM,
+    TokenM (..),
     invalidateTokens,
-    runApiTokenM,
-    ApiTokenM,
+    ApiTokenM (..),
+    getToken,
+    getAccessToken,
+    getAccessTokenNetwork,
+    getRefreshToken,
+    useRefreshToken,
+    toValidToken,
+    withNewTokens,
     runApiTokenMConst,
+    clientID,
+    clientSecret,
+    token,
+    tokenExpiresAt,
+    refreshToken,
+    configToken,
+    Tokens (..),
+    authorizationUrl,
+    runGetTokens,
   )
 where
 
 import Config
 import Control.Lens
 import Data.Aeson
+import Data.Aeson.TH
 import qualified Data.ByteString.Char8 as BS
 import Data.Maybe
 import Data.Text
@@ -41,10 +54,35 @@ import GHC.Generics
 import Logger
 import Network.HTTP.Req
 import Polysemy
-import Polysemy.Config
 import Polysemy.Input
 import Types
 import Prelude
+
+data Tokens
+  = Tokens
+      { _token :: Maybe String,
+        _refreshToken :: Maybe String,
+        _clientID :: String,
+        _clientSecret :: String,
+        _tokenExpiresAt :: Maybe UTCTime
+      }
+  deriving (Eq, Generic, Show)
+
+$(makeLenses ''Tokens)
+
+$(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''Tokens)
+
+configToken :: Tokens -> UTCTime -> Either InvalidTokenReason ValidToken
+configToken config currentTime =
+  case config ^. token of
+    Just t ->
+      case config ^. tokenExpiresAt of
+        Just expires ->
+          if expires <= currentTime
+            then Left Expired
+            else Right $ ValidToken $ BS.pack t
+        Nothing -> Left Missing
+    Nothing -> Left Missing
 
 data ValidTokenM m a where
   GetValidToken :: ValidTokenM m ValidToken
@@ -56,10 +94,6 @@ data TokenM m a where
   GetToken :: TokenM m (Either InvalidTokenReason ValidToken)
 
 $(makeSem ''TokenM)
-
-runGetToken :: Members '[Input UTCTime, ConfigM] r => InterpreterFor TokenM r
-runGetToken = interpret $ \case
-  GetToken -> configToken <$> getConfig <*> input @UTCTime
 
 data TokenEndpoint
   = TokenEndpoint
@@ -76,7 +110,7 @@ data ApiTokenM m a where
 
 $(makeSem ''ApiTokenM)
 
-withNewTokens :: TokenEndpoint -> Config -> UTCTime -> Config
+withNewTokens :: TokenEndpoint -> Tokens -> UTCTime -> Tokens
 withNewTokens TokenEndpoint {..} original currentTime =
   let expiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
    in case refresh_token of
@@ -136,48 +170,20 @@ authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=
 toValidToken :: TokenEndpoint -> ValidToken
 toValidToken endpoint = ValidToken $ BS.pack $ access_token endpoint
 
-runValidToken :: (Members '[ApiTokenM, TokenM, ConfigM, Input UTCTime] r) => InterpreterFor ValidTokenM r
-runValidToken = interpret $ \case
-  GetValidToken -> do
-    eValidToken <- getToken
-    case eValidToken of
-      Left Missing -> toValidToken <$> getAccessToken
-      Left Expired -> toValidToken <$> getRefreshToken
-      Right (ValidToken validToken) -> return $ ValidToken validToken
-  InvalidateTokens -> do
-    oldCfg <- getConfig
-    currentTime <- input
-    writeConfig (oldCfg & tokenExpiresAt ?~ currentTime)
-
 runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
-
-runApiTokenM :: (Members '[Embed IO, ConfigM, Logger] r) => InterpreterFor ApiTokenM r
-runApiTokenM = interpret $ \case
-  GetRefreshToken -> do
-    config <- getConfig
-    warn "Trying to refresh tokens"
-    embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
-  GetAccessToken -> do
-    config <- getConfig
-    embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
-    authorizationCode <- embed getLine
-    embed $ getAccessTokenNetwork (config ^. clientID) (config ^. clientSecret) authorizationCode
-
-doSaveTokens :: (Members '[Input UTCTime, ConfigM, ApiTokenM] r) => TokenEndpoint -> Sem r TokenEndpoint
-doSaveTokens tokens = do
-  originalConfig <- getConfig
-  currentTime <- input @UTCTime
-  writeConfig (withNewTokens tokens originalConfig currentTime)
-  return tokens
-
-saveTokens :: (Members '[Input UTCTime, ConfigM, ApiTokenM] r) => Sem r a -> Sem r a
-saveTokens = intercept @ApiTokenM $ \case
-  GetRefreshToken -> getRefreshToken >>= doSaveTokens
-  GetAccessToken -> getAccessToken >>= doSaveTokens
 
 runApiTokenMConst :: TokenEndpoint -> TokenEndpoint -> InterpreterFor ApiTokenM r
 runApiTokenMConst refresh access = interpret $ \case
   GetRefreshToken -> return refresh
   GetAccessToken -> return access
+
+runGetTokens :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Input Tokens) r
+runGetTokens fp = interpret $ \case
+  Input -> do
+    info $ "Loading tokens from " ++ fp
+    ecfg <- embed $ eitherDecodeFileStrict fp
+    case ecfg of
+      Left e -> error e
+      Right cfg -> return cfg
