@@ -21,10 +21,7 @@ module Transaction
     TransactionsManager (..),
     runTransactionsManager,
     getNewTransactions,
-    ShowTransactionsM,
-    showTransactions,
     runShowTransactionsMEmpty,
-    runShowTransactionsMOnList,
   )
 where
 
@@ -42,11 +39,6 @@ import Polysemy.LastImported
 import Polysemy.Output
 import Types
 import Prelude hiding (log)
-
-data ShowTransactionsM m a where
-  ShowTransactions :: [Transaction] -> ShowTransactionsM m ()
-
-$(makeSem ''ShowTransactionsM)
 
 data TransactionsManager m a where
   GetNewTransactions :: TransactionsManager m [Transaction]
@@ -86,20 +78,12 @@ runOutputOnCsv ::
       r
   ) =>
   FilePath ->
-  InterpreterFor ShowTransactionsM r
+  InterpreterFor (Output [Transaction]) r
 runOutputOnCsv fp = interpret $ \case
-  ShowTransactions tx -> do
+  Output tx -> do
     info $ "Writing to " ++ fp
     embed $ S.writeFile fp (CSV.encode tx)
 
-runShowTransactionsMEmpty :: InterpreterFor ShowTransactionsM r
+runShowTransactionsMEmpty :: InterpreterFor (Output [Transaction]) r
 runShowTransactionsMEmpty = interpret $ \case
-  ShowTransactions _ -> return ()
-
-runShowTransactionsMOnList :: Sem (ShowTransactionsM : r) a -> Sem r ([[Transaction]], a)
-runShowTransactionsMOnList =
-  runOutputList @[Transaction]
-    . reinterpret
-      ( \case
-          ShowTransactions tx -> output tx
-      )
+  Output _ -> return ()

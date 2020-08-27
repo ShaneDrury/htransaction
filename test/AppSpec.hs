@@ -41,7 +41,7 @@ runTransactionsManagerSimple :: [Transaction] -> InterpreterFor TransactionsMana
 runTransactionsManagerSimple txs = interpret $ \case
   GetNewTransactions -> return txs
 
-runAppEmpty :: Sem '[TransactionsManager, ShowTransactionsM, Logger] () -> ([LogMsg], ())
+runAppEmpty :: Sem '[TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
 runAppEmpty =
   run
     . runOutputList @LogMsg
@@ -49,12 +49,12 @@ runAppEmpty =
     . runShowTransactionsMEmpty
     . runTransactionsManagerEmpty
 
-runAppSimple :: [Transaction] -> Sem '[TransactionsManager, ShowTransactionsM, Logger] () -> ([LogMsg], ([[Transaction]], ()))
+runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ([[Transaction]], ()))
 runAppSimple transactions =
   run
     . runOutputList @LogMsg
     . runLoggerAsOutput
-    . runShowTransactionsMOnList
+    . runOutputList @[Transaction]
     . runTransactionsManagerSimple transactions
 
 testTokenExpiresAt :: Maybe UTCTime
@@ -147,7 +147,7 @@ runAppDeep ::
        TokenM,
        Input UTCTime,
        TokensM,
-       ShowTransactionsM,
+       Output [Transaction],
        Input (Maybe (Maybe [Transaction])),
        ApiTokenM,
        PersistLastImportedM,
@@ -175,7 +175,7 @@ runAppDeep tx config tokens =
     . runPersistLastImportedM 1
     . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
     . runInputList tx
-    . runShowTransactionsMOnList
+    . runOutputList @[Transaction]
     . runInputConst tokens
     . runOutputList @Tokens
     . runStateCached @Tokens
