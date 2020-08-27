@@ -19,13 +19,10 @@ module Transaction
     latestTransaction,
     runOutputOnCsv,
     TransactionsManager (..),
-    getTransactions,
     runTransactionsManager,
-    NextTransactionsM (..),
-    getNextTransactions,
+    getNewTransactions,
     ShowTransactionsM,
     showTransactions,
-    runNextTransactionsMOnLastImported,
     runShowTransactionsMEmpty,
     runShowTransactionsMOnList,
   )
@@ -52,25 +49,28 @@ data ShowTransactionsM m a where
 $(makeSem ''ShowTransactionsM)
 
 data TransactionsManager m a where
-  GetTransactions :: Day -> TransactionsManager m [Transaction]
+  GetNewTransactions :: TransactionsManager m [Transaction]
 
 $(makeSem ''TransactionsManager)
 
-data NextTransactionsM m a where
-  GetNextTransactions :: NextTransactionsM m [Transaction]
-
-$(makeSem ''NextTransactionsM)
-
 runTransactionsManager ::
   ( Members
-      '[ TransactionsApiM
+      '[ TransactionsApiM,
+         GetLastImportedM,
+         PersistLastImportedM,
+         Logger
        ]
       r
   ) =>
   Int ->
   InterpreterFor TransactionsManager r
 runTransactionsManager bankAccountId = interpret $ \case
-  GetTransactions fromDate -> getTransactionsApi bankAccountId fromDate
+  GetNewTransactions -> do
+    lastImported <- getLastImported
+    info $ "Getting transactions after " ++ show lastImported
+    tx <- getTransactionsApi bankAccountId lastImported
+    unless (null tx) (persistLastImported (latestTransaction tx))
+    return tx
 
 toDay :: TransactionDate -> Day
 toDay = coerce
@@ -103,12 +103,3 @@ runShowTransactionsMOnList =
       ( \case
           ShowTransactions tx -> output tx
       )
-
-runNextTransactionsMOnLastImported :: (Members '[TransactionsManager, GetLastImportedM, PersistLastImportedM, Logger] r) => InterpreterFor NextTransactionsM r
-runNextTransactionsMOnLastImported = interpret $ \case
-  GetNextTransactions -> do
-    lastImported <- getLastImported
-    info $ "Getting transactions after " ++ show lastImported
-    tx <- getTransactions lastImported
-    unless (null tx) (persistLastImported (latestTransaction tx))
-    return tx

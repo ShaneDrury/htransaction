@@ -33,15 +33,15 @@ import Transaction
 import Types
 import Prelude
 
-runTransactionsManagerEmpty :: InterpreterFor NextTransactionsM r
+runTransactionsManagerEmpty :: InterpreterFor TransactionsManager r
 runTransactionsManagerEmpty = interpret $ \case
-  GetNextTransactions -> return []
+  GetNewTransactions -> return []
 
-runTransactionsManagerSimple :: [Transaction] -> InterpreterFor NextTransactionsM r
+runTransactionsManagerSimple :: [Transaction] -> InterpreterFor TransactionsManager r
 runTransactionsManagerSimple txs = interpret $ \case
-  GetNextTransactions -> return txs
+  GetNewTransactions -> return txs
 
-runAppEmpty :: Sem '[NextTransactionsM, ShowTransactionsM, Logger] () -> ([LogMsg], ())
+runAppEmpty :: Sem '[TransactionsManager, ShowTransactionsM, Logger] () -> ([LogMsg], ())
 runAppEmpty =
   run
     . runOutputList @LogMsg
@@ -49,7 +49,7 @@ runAppEmpty =
     . runShowTransactionsMEmpty
     . runTransactionsManagerEmpty
 
-runAppSimple :: [Transaction] -> Sem '[NextTransactionsM, ShowTransactionsM, Logger] () -> ([LogMsg], ([[Transaction]], ()))
+runAppSimple :: [Transaction] -> Sem '[TransactionsManager, ShowTransactionsM, Logger] () -> ([LogMsg], ([[Transaction]], ()))
 runAppSimple transactions =
   run
     . runOutputList @LogMsg
@@ -140,8 +140,7 @@ runAppDeep ::
   Config ->
   Tokens ->
   Sem
-    '[ NextTransactionsM,
-       TransactionsManager,
+    '[ TransactionsManager,
        TransactionsApiM,
        FaM TransactionsEndpoint,
        ValidTokenM,
@@ -189,7 +188,6 @@ runAppDeep tx config tokens =
     . retryOnUnauthorized @TransactionsEndpoint
     . runTransactionsApiM
     . runTransactionsManager 1
-    . runNextTransactionsMOnLastImported
 
 spec :: Spec
 spec = do

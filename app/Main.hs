@@ -48,7 +48,6 @@ runapp Args {..} =
     . runOutputOnCsv outfile
     . runTransactionsApiM
     . runTransactionsManager bankAccountId
-    . runNextTransactionsMOnLastImported
 
 main :: IO ()
 main = do
