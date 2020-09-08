@@ -69,7 +69,7 @@ testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "202
 testConfig :: Config
 testConfig =
   Config
-    { _bankAccounts = Map.fromList [(1, LastImported $ fromGregorian 2020 4 19)]
+    { _bankAccounts = [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 19}]
     }
 
 testTokens :: Tokens
@@ -299,7 +299,7 @@ spec = do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
                   tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
-                updatedLastImportConfig = testConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 21}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (Info, "Outputting last imported day of 2020-04-21"),
@@ -327,7 +327,7 @@ spec = do
                           )
                           testCurrentTime
                       )
-                updatedLastImportConfig = testConfig & bankAccounts .~ Map.singleton 1 (LastImported $ fromGregorian 2020 4 21)
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 21}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),

@@ -24,6 +24,7 @@ module Polysemy.LastImported
 where
 
 import Config
+import Control.Lens
 import Control.Monad
 import qualified Data.Map as Map
 import Data.Time
@@ -49,7 +50,9 @@ runLastImportedManager bankAccountId = interpret $ \case
   GetLastImported -> do
     bas <- getBankAccounts
     case Map.lookup bankAccountId bas of
-      Just (LastImported day) -> return day
+      Just ba -> do
+        let (LastImported day) = ba ^. lastImported
+        return day
       Nothing -> error $ "No bankAccountId in config: " ++ show bankAccountId
 
 runPersistLastImportedM :: (Members '[BankAccountsM, ConfigM, Logger, GetLastImportedM] r) => Int -> InterpreterFor PersistLastImportedM r

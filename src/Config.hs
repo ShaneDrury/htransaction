@@ -1,7 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -9,31 +12,37 @@ module Config
   ( Config (..),
     updateConfig,
     bankAccounts,
-    BankAccounts,
+    BankAccount (..),
+    bankAccountId,
+    lastImported,
   )
 where
 
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Data.Aeson
 import Data.Aeson.TH
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.Map as Map
-import Data.Time
 import GHC.Generics
 import Types
 import Prelude
 
-type BankAccounts = Map.Map Int LastImported
+data BankAccount = BankAccount {_bankAccountId :: Int, _lastImported :: LastImported} deriving stock (Eq, Show)
+
+$(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''BankAccount)
 
 newtype Config
   = Config
-      { _bankAccounts :: BankAccounts
+      { _bankAccounts :: [BankAccount]
       }
-  deriving (Eq, Generic, Show)
+  deriving stock (Eq, Generic, Show)
+
+$(makeLenses ''BankAccount)
 
 $(makeLenses ''Config)
 
-$(deriveJSON defaultOptions {fieldLabelModifier = drop 1} ''Config)
+$(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''Config)
+
+lastImportedById :: Int -> Traversal' Config LastImported
+lastImportedById bID = bankAccounts . traversed . filtered (\ba -> _bankAccountId ba == bID) . lastImported
 
 updateConfig :: Int -> LastImported -> Config -> Config
-updateConfig bankAccount day = over bankAccounts (Map.insert bankAccount day)
+updateConfig bID newLastImported config = config & lastImportedById bID .~ newLastImported

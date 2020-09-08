@@ -42,12 +42,10 @@ import Control.Lens
 import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as S
+import qualified Data.Map as Map
 import Data.Maybe
-import Data.Text
 import Data.Time
-import GHC.Generics
 import Logger
-import Network.HTTP.Req
 import Polysemy
 import Polysemy.Input
 import Polysemy.Output
@@ -100,13 +98,16 @@ runStateCached =
       )
 
 data BankAccountsM m a where
-  GetBankAccounts :: BankAccountsM m BankAccounts
+  GetBankAccounts :: BankAccountsM m (Map.Map Int BankAccount)
 
 $(makeSem ''BankAccountsM)
 
 runBankAccountsMOnConfig :: (Members '[ConfigM] r) => InterpreterFor BankAccountsM r
 runBankAccountsMOnConfig = interpret $ \case
-  GetBankAccounts -> (^. bankAccounts) <$> getConfig
+  GetBankAccounts -> do
+    config <- getConfig
+    let baList = config ^. bankAccounts
+    return $ Map.fromList $ (\ba -> (ba ^. bankAccountId, ba)) <$> baList
 
 runGetConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Input Config) r
 runGetConfig fp = interpret $ \case
