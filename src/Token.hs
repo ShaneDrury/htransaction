@@ -42,7 +42,6 @@ module Token
   )
 where
 
-import Config
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
@@ -126,6 +125,9 @@ withNewTokens TokenEndpoint {..} original currentTime =
               _tokenExpiresAt = expiresAt
             }
 
+userAgentHeader :: Option scheme
+userAgentHeader = header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
+
 getAccessTokenNetwork :: String -> String -> String -> IO TokenEndpoint
 getAccessTokenNetwork cID secret authorizationCode = runReq defaultHttpConfig $ do
   r <-
@@ -141,8 +143,7 @@ getAccessTokenNetwork cID secret authorizationCode = runReq defaultHttpConfig $ 
             <> "grant_type" =: ("authorization_code" :: Text)
       )
       jsonResponse
-      ( header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
-      )
+      userAgentHeader
   let body = responseBody r :: TokenEndpoint
   return body
 
@@ -159,8 +160,7 @@ useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
             <> "grant_type" =: ("refresh_token" :: Text)
       )
       jsonResponse
-      ( header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
-      )
+      userAgentHeader
   let body = responseBody r :: TokenEndpoint
   return body
 
