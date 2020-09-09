@@ -70,3 +70,5 @@ extra-deps:
 # compiler-check: newer-minor
 # docker:
 #   enable: true
+ghc-options:
+  "$everything": -haddock
