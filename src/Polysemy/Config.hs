@@ -24,9 +24,9 @@ module Polysemy.Config
     runWriteConfig,
     getConfig,
     writeConfig,
-    ConfigM,
-    BankAccountsM,
-    getBankAccounts,
+    ConfigM (..),
+    BankAccountsM (..),
+    getBankAccount,
     runBankAccountsMOnConfig,
     runTokensM,
     runConfigM,
@@ -37,12 +37,13 @@ module Polysemy.Config
   )
 where
 
+import Cli
 import Config
 import Control.Lens
 import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as S
-import qualified Data.Map as Map
+import Data.List (find)
 import Data.Maybe
 import Data.Time
 import Logger
@@ -98,16 +99,17 @@ runStateCached =
       )
 
 data BankAccountsM m a where
-  GetBankAccounts :: BankAccountsM m (Map.Map Int BankAccount)
+  GetBankAccount :: BankAccountsM m BankAccount
 
 $(makeSem ''BankAccountsM)
 
-runBankAccountsMOnConfig :: (Members '[ConfigM] r) => InterpreterFor BankAccountsM r
+runBankAccountsMOnConfig :: (Members '[ConfigM, Input Args] r) => InterpreterFor BankAccountsM r
 runBankAccountsMOnConfig = interpret $ \case
-  GetBankAccounts -> do
+  GetBankAccount -> do
     config <- getConfig
+    args <- input @Args
     let baList = config ^. bankAccounts
-    return $ Map.fromList $ (\ba -> (ba ^. bankAccountId, ba)) <$> baList
+    return $ fromJust $ find (\ba -> ba ^. Config.bankAccountId == Cli.bankAccountId args) baList
 
 runGetConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Input Config) r
 runGetConfig fp = interpret $ \case

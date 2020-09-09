@@ -16,13 +16,14 @@ import Fa
 import Logger
 import Polysemy
 import Polysemy.Config
+import Polysemy.Input
 import Polysemy.LastImported
 import Token
 import Transaction
 import Types
 import Prelude
 
-runapp Args {..} =
+runapp args@Args {..} =
   runM
     . handleErrors
     . runOutputOnLog verbose
@@ -35,9 +36,9 @@ runapp Args {..} =
     . runWriteTokens tokensFile
     . runStateCached @Tokens
     . runTokensM
+    . runInputConst args
     . runBankAccountsMOnConfig
-    . runLastImportedManager bankAccountId
-    . runPersistLastImportedM bankAccountId
+    . runPersistLastImportedM
     . runApiTokenM
     . runGetTime
     . saveTokens
@@ -47,7 +48,7 @@ runapp Args {..} =
     . retryOnUnauthorized
     . runOutputOnCsv outfile
     . runTransactionsApiM
-    . runTransactionsManager bankAccountId
+    . runTransactionsManager
 
 main :: IO ()
 main = do

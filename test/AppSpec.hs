@@ -11,10 +11,10 @@ where
 
 import Api
 import App (app)
+import Cli
 import Config
 import Control.Lens
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import Data.Time
 import Fa
@@ -35,27 +35,38 @@ import Prelude
 
 runTransactionsManagerEmpty :: InterpreterFor TransactionsManager r
 runTransactionsManagerEmpty = interpret $ \case
-  GetNewTransactions -> return []
+  GetNewTransactions _ -> return []
 
 runTransactionsManagerSimple :: [Transaction] -> InterpreterFor TransactionsManager r
 runTransactionsManagerSimple txs = interpret $ \case
-  GetNewTransactions -> return txs
+  GetNewTransactions _ -> return txs
 
-runAppEmpty :: Sem '[TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
+runGetConfigSimple :: Config -> InterpreterFor ConfigM r
+runGetConfigSimple cfg = interpret $ \case
+  GetConfig -> return cfg
+  WriteConfig _ -> return ()
+
+runAppEmpty :: Sem '[BankAccountsM, ConfigM, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
 runAppEmpty =
   run
     . runOutputList @LogMsg
     . runLoggerAsOutput
     . runShowTransactionsMEmpty
     . runTransactionsManagerEmpty
+    . runInputConst testArgs
+    . runGetConfigSimple testConfig
+    . runBankAccountsMOnConfig
 
-runAppSimple :: [Transaction] -> Sem '[TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ([[Transaction]], ()))
+runAppSimple :: [Transaction] -> Sem '[BankAccountsM, ConfigM, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ([[Transaction]], ()))
 runAppSimple transactions =
   run
     . runOutputList @LogMsg
     . runLoggerAsOutput
     . runOutputList @[Transaction]
     . runTransactionsManagerSimple transactions
+    . runInputConst testArgs
+    . runGetConfigSimple testConfig
+    . runBankAccountsMOnConfig
 
 testTokenExpiresAt :: Maybe UTCTime
 testTokenExpiresAt = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-09"
@@ -135,6 +146,9 @@ runFaMTest =
             Nothing -> return $ Right $ transactionsEndpoint []
     )
 
+testArgs :: Args
+testArgs = Args {Cli.bankAccountId = 1, outfile = "", configFile = "", tokensFile = "", verbose = True}
+
 runAppDeep ::
   [Maybe [Transaction]] ->
   Config ->
@@ -151,8 +165,8 @@ runAppDeep ::
        Input (Maybe (Maybe [Transaction])),
        ApiTokenM,
        PersistLastImportedM,
-       GetLastImportedM,
        BankAccountsM,
+       Input Args,
        ConfigM,
        Logger,
        Error H.HttpException,
@@ -170,9 +184,9 @@ runAppDeep tx config tokens =
     . runOutputList @Config
     . runStateCached @Config
     . runConfigM
+    . runInputConst testArgs
     . runBankAccountsMOnConfig
-    . runLastImportedManager 1
-    . runPersistLastImportedM 1
+    . runPersistLastImportedM
     . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
     . runInputList tx
     . runOutputList @[Transaction]
@@ -187,7 +201,7 @@ runAppDeep tx config tokens =
     . runFaMTest
     . retryOnUnauthorized @TransactionsEndpoint
     . runTransactionsApiM
-    . runTransactionsManager 1
+    . runTransactionsManager
 
 spec :: Spec
 spec = do

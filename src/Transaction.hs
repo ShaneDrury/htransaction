@@ -26,6 +26,8 @@ module Transaction
 where
 
 import Api
+import Config
+import Control.Lens
 import Control.Monad
 import qualified Data.ByteString.Lazy.Char8 as S
 import Data.Coerce
@@ -41,26 +43,24 @@ import Types
 import Prelude hiding (log)
 
 data TransactionsManager m a where
-  GetNewTransactions :: TransactionsManager m [Transaction]
+  GetNewTransactions :: BankAccount -> TransactionsManager m [Transaction]
 
 $(makeSem ''TransactionsManager)
 
 runTransactionsManager ::
   ( Members
       '[ TransactionsApiM,
-         GetLastImportedM,
          PersistLastImportedM,
          Logger
        ]
       r
   ) =>
-  Int ->
   InterpreterFor TransactionsManager r
-runTransactionsManager bankAccountId = interpret $ \case
-  GetNewTransactions -> do
-    lastImported <- getLastImported
-    info $ "Getting transactions after " ++ show lastImported
-    tx <- getTransactionsApi bankAccountId lastImported
+runTransactionsManager = interpret $ \case
+  GetNewTransactions bankAccount -> do
+    let (LastImported day) = bankAccount ^. lastImported
+    info $ "Getting transactions after " ++ show day
+    tx <- getTransactionsApi (bankAccount ^. bankAccountId) day
     unless (null tx) (persistLastImported (latestTransaction tx))
     return tx
 
