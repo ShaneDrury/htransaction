@@ -22,18 +22,12 @@ module Polysemy.Config
     saveTokens,
     runGetConfig,
     runWriteConfig,
-    getConfig,
-    writeConfig,
-    ConfigM (..),
     BankAccountsM (..),
     getBankAccount,
     runBankAccountsMOnConfig,
-    runTokensM,
-    runConfigM,
     runStateCached,
     Cached (..),
     runWriteTokens,
-    TokensM (..),
   )
 where
 
@@ -54,28 +48,6 @@ import Polysemy.State
 import Token
 import Types
 import Prelude
-
-data TokensM m a where
-  GetTokens :: TokensM m Tokens
-  WriteTokens :: Tokens -> TokensM m ()
-
-data ConfigM m a where
-  GetConfig :: ConfigM m Config
-  WriteConfig :: Config -> ConfigM m ()
-
-$(makeSem ''TokensM)
-
-$(makeSem ''ConfigM)
-
-runTokensM :: Sem (TokensM : r) a -> Sem (State Tokens : r) a
-runTokensM = reinterpret $ \case
-  GetTokens -> get @Tokens
-  WriteTokens s -> put @Tokens s
-
-runConfigM :: Sem (ConfigM : r) a -> Sem (State Config : r) a
-runConfigM = reinterpret $ \case
-  GetConfig -> get @Config
-  WriteConfig s -> put @Config s
 
 data Cached a = Cached a | Dirty
   deriving stock (Eq, Ord, Show, Functor)
@@ -103,10 +75,10 @@ data BankAccountsM m a where
 
 $(makeSem ''BankAccountsM)
 
-runBankAccountsMOnConfig :: (Members '[ConfigM, Input Args] r) => InterpreterFor BankAccountsM r
+runBankAccountsMOnConfig :: (Members '[State Config, Input Args] r) => InterpreterFor BankAccountsM r
 runBankAccountsMOnConfig = interpret $ \case
   GetBankAccount -> do
-    config <- getConfig
+    config <- get @Config
     args <- input @Args
     let baList = config ^. bankAccounts
     return $ fromJust $ find (\ba -> ba ^. Config.bankAccountId == Cli.bankAccountId args) baList
@@ -132,11 +104,11 @@ runWriteConfig fp = interpret $ \case
     info $ "Writing config to " ++ fp
     embed $ S.writeFile fp (encode cfg)
 
-runGetToken :: Members '[Input UTCTime, TokensM] r => InterpreterFor TokenM r
+runGetToken :: Members '[Input UTCTime, State Tokens] r => InterpreterFor TokenM r
 runGetToken = interpret $ \case
-  GetToken -> configToken <$> getTokens <*> input @UTCTime
+  GetToken -> configToken <$> get @Tokens <*> input @UTCTime
 
-runValidToken :: (Members '[ApiTokenM, TokenM, TokensM, Input UTCTime] r) => InterpreterFor ValidTokenM r
+runValidToken :: (Members '[ApiTokenM, TokenM, State Tokens, Input UTCTime] r) => InterpreterFor ValidTokenM r
 runValidToken = interpret $ \case
   GetValidToken -> do
     eValidToken <- getToken
@@ -145,30 +117,30 @@ runValidToken = interpret $ \case
       Left Expired -> toValidToken <$> getRefreshToken
       Right (ValidToken validToken) -> return $ ValidToken validToken
   InvalidateTokens -> do
-    oldTokens <- getTokens
+    oldTokens <- get @Tokens
     currentTime <- input
-    writeTokens (oldTokens & tokenExpiresAt ?~ currentTime)
+    put (oldTokens & tokenExpiresAt ?~ currentTime)
 
-runApiTokenM :: (Members '[Embed IO, TokensM, Logger] r) => InterpreterFor ApiTokenM r
+runApiTokenM :: (Members '[Embed IO, State Tokens, Logger] r) => InterpreterFor ApiTokenM r
 runApiTokenM = interpret $ \case
   GetRefreshToken -> do
-    config <- getTokens
+    config <- get @Tokens
     warn "Trying to refresh tokens"
     embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
   GetAccessToken -> do
-    config <- getTokens
+    config <- get @Tokens
     embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
     authorizationCode <- embed getLine
     embed $ getAccessTokenNetwork (config ^. clientID) (config ^. clientSecret) authorizationCode
 
-doSaveTokens :: (Members '[Input UTCTime, TokensM, ApiTokenM] r) => TokenEndpoint -> Sem r TokenEndpoint
+doSaveTokens :: (Members '[Input UTCTime, State Tokens, ApiTokenM] r) => TokenEndpoint -> Sem r TokenEndpoint
 doSaveTokens tokens = do
-  originalConfig <- getTokens
+  originalConfig <- get @Tokens
   currentTime <- input @UTCTime
-  writeTokens (withNewTokens tokens originalConfig currentTime)
+  put (withNewTokens tokens originalConfig currentTime)
   return tokens
 
-saveTokens :: (Members '[Input UTCTime, TokensM, ApiTokenM] r) => Sem r a -> Sem r a
+saveTokens :: (Members '[Input UTCTime, State Tokens, ApiTokenM] r) => Sem r a -> Sem r a
 saveTokens = intercept @ApiTokenM $ \case
   GetRefreshToken -> getRefreshToken >>= doSaveTokens
   GetAccessToken -> getAccessToken >>= doSaveTokens

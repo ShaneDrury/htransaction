@@ -41,12 +41,12 @@ runTransactionsManagerSimple :: [Transaction] -> InterpreterFor TransactionsMana
 runTransactionsManagerSimple txs = interpret $ \case
   GetNewTransactions _ -> return txs
 
-runGetConfigSimple :: Config -> InterpreterFor ConfigM r
+runGetConfigSimple :: Config -> InterpreterFor (State Config) r
 runGetConfigSimple cfg = interpret $ \case
-  GetConfig -> return cfg
-  WriteConfig _ -> return ()
+  Get -> return cfg
+  Put _ -> return ()
 
-runAppEmpty :: Sem '[BankAccountsM, ConfigM, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
+runAppEmpty :: Sem '[BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
 runAppEmpty =
   run
     . runOutputList @LogMsg
@@ -57,7 +57,7 @@ runAppEmpty =
     . runGetConfigSimple testConfig
     . runBankAccountsMOnConfig
 
-runAppSimple :: [Transaction] -> Sem '[BankAccountsM, ConfigM, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ([[Transaction]], ()))
+runAppSimple :: [Transaction] -> Sem '[BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ([[Transaction]], ()))
 runAppSimple transactions =
   run
     . runOutputList @LogMsg
@@ -160,14 +160,14 @@ runAppDeep ::
        ValidTokenM,
        TokenM,
        Input UTCTime,
-       TokensM,
+       State Tokens,
        Output [Transaction],
        Input (Maybe (Maybe [Transaction])),
        ApiTokenM,
        PersistLastImportedM,
        BankAccountsM,
        Input Args,
-       ConfigM,
+       State Config,
        Logger,
        Error H.HttpException,
        Error ApiError,
@@ -183,7 +183,6 @@ runAppDeep tx config tokens =
     . runInputConst config
     . runOutputList @Config
     . runStateCached @Config
-    . runConfigM
     . runInputConst testArgs
     . runBankAccountsMOnConfig
     . runPersistLastImportedM
@@ -193,7 +192,6 @@ runAppDeep tx config tokens =
     . runInputConst tokens
     . runOutputList @Tokens
     . runStateCached @Tokens
-    . runTokensM
     . runInputConst testCurrentTime
     . saveTokens
     . runGetToken
@@ -216,9 +214,9 @@ spec = do
               '[ ValidTokenM,
                  TokenM,
                  Input UTCTime,
-                 TokensM,
+                 State Tokens,
                  Input Tokens,
-                 ConfigM,
+                 State Config,
                  Input Config,
                  ApiTokenM
                ]
@@ -229,10 +227,8 @@ spec = do
               . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
               . runInputConst config
               . evalState config
-              . runConfigM
               . runInputConst tokens
               . evalState tokens
-              . runTokensM
               . runInputConst testCurrentTime
               . runGetToken
               . runValidToken
