@@ -21,6 +21,7 @@ import Fa
 import Logger
 import qualified Network.HTTP.Req as H
 import Polysemy
+import Polysemy.Cached
 import Polysemy.Config
 import Polysemy.Error
 import Polysemy.Input

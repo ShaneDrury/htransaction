@@ -15,6 +15,7 @@ import Control.Monad
 import Fa
 import Logger
 import Polysemy
+import Polysemy.Cached
 import Polysemy.Config
 import Polysemy.Input
 import Polysemy.LastImported
