@@ -39,6 +39,7 @@ module Token
     Tokens (..),
     authorizationUrl,
     runGetTokens,
+    runGetToken,
   )
 where
 
@@ -54,6 +55,7 @@ import Logger
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Input
+import Polysemy.State
 import Types
 import Prelude
 
@@ -93,6 +95,10 @@ data TokenM m a where
   GetToken :: TokenM m (Either InvalidTokenReason ValidToken)
 
 $(makeSem ''TokenM)
+
+runGetToken :: Members '[Input UTCTime, State Tokens] r => InterpreterFor TokenM r
+runGetToken = interpret $ \case
+  GetToken -> configToken <$> get @Tokens <*> input @UTCTime
 
 data TokenEndpoint
   = TokenEndpoint

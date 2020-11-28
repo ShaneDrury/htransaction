@@ -104,10 +104,6 @@ runWriteConfig fp = interpret $ \case
     info $ "Writing config to " ++ fp
     embed $ S.writeFile fp (encode cfg)
 
-runGetToken :: Members '[Input UTCTime, State Tokens] r => InterpreterFor TokenM r
-runGetToken = interpret $ \case
-  GetToken -> configToken <$> get @Tokens <*> input @UTCTime
-
 runValidToken :: (Members '[ApiTokenM, TokenM, State Tokens, Input UTCTime] r) => InterpreterFor ValidTokenM r
 runValidToken = interpret $ \case
   GetValidToken -> do
