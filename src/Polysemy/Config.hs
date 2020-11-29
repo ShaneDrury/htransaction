@@ -88,7 +88,7 @@ runValidToken = interpret $ \case
     case eValidToken of
       Left Missing -> toValidToken <$> getAccessToken
       Left Expired -> toValidToken <$> getRefreshToken
-      Right (ValidToken validToken) -> return $ ValidToken validToken
+      Right v -> return v
   InvalidateTokens -> do
     oldTokens <- get @Tokens
     currentTime <- input
