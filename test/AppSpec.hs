@@ -266,13 +266,20 @@ spec = do
                   }
               )
       it "imports 100 transaction and produces a warning" $
-        runAppSimple transactions_100 app
-          `shouldBe` ( [(Info, "Number of transactions: 100"), (Warning, "WARNING: Number of transactions close to limit")],
-                       ( [ transactions_100
-                         ],
-                         ()
-                       )
-                     )
+        case runAppDeep [Just transactions_100] testConfig testTokens app of
+          Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
+          Right r ->
+            r
+              `shouldBe` ( [(Info, "Getting transactions after 2020-04-19"), (Warning, "WARNING: Number of transactions close to limit"), (Info, "Outputting last imported day of 2020-04-20"), (Info, "Number of transactions: 100")],
+                           ( [updateConfig 1 (LastImported $ fromGregorian 2020 4 20) testConfig],
+                               ( [ transactions_100
+                                 ],
+                                 ( [],
+                                   ()
+                                 )
+                               )
+                             )
+                         )
     context "happy, deep path" $ do
       it "imports transactions, outputs them, updates config" $
         case runAppDeep [Just testTransactions] testConfig testTokens app of

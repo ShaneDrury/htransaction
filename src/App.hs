@@ -18,5 +18,4 @@ app = do
   bankAccount <- getBankAccount
   tx <- getNewTransactions bankAccount
   info $ "Number of transactions: " ++ show (length tx)
-  when (length tx == 100) (warn "WARNING: Number of transactions close to limit")
   output tx

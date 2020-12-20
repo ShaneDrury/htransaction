@@ -23,10 +23,11 @@ where
 
 import Control.Monad
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Text
+import Data.Text hiding (length)
 import Data.Time
 import Fa
 import GHC.Generics (Generic)
+import Logger
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
@@ -45,7 +46,7 @@ newtype TransactionsEndpoint
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
 
-runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, Error ApiError] r) => InterpreterFor TransactionsApiM r
+runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, Error ApiError, Logger] r) => InterpreterFor TransactionsApiM r
 runTransactionsApiM = interpret $ \case
   GetTransactionsApi bankAccountId fromDate -> do
     etx <-
@@ -57,5 +58,11 @@ runTransactionsApiM = interpret $ \case
             <> "per_page" =: (100 :: Int)
         )
     case etx of
-      Right r -> return $ bank_transactions r
+      Right endpoint -> do
+        when (length tx == 100) (warn "WARNING: Number of transactions close to limit")
+        return tx
+        where
+          tx = bank_transactions endpoint
       Left e -> throw e
+-- this could be a good case to write as an "app" style thing to be interpreted
+-- self contained bit of business logic
