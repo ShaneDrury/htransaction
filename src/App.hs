@@ -8,6 +8,7 @@ where
 import Control.Monad
 import Logger
 import Polysemy
+import Polysemy.BankAccount
 import Polysemy.Config
 import Polysemy.Output
 import Transaction

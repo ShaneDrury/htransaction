@@ -26,6 +26,7 @@ import Control.Monad
 import Data.Time
 import Logger
 import Polysemy
+import Polysemy.BankAccount
 import Polysemy.Config
 import Polysemy.Output
 import Polysemy.State

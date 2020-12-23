@@ -15,6 +15,7 @@ import Control.Monad
 import Fa
 import Logger
 import Polysemy
+import Polysemy.BankAccount
 import Polysemy.Cached
 import Polysemy.Config
 import Polysemy.Input
@@ -32,11 +33,11 @@ runapp args@Args {..} =
     . runGetConfig configFile
     . runWriteConfig configFile
     . runStateCached @Config
+    . runInputConst args
+    . runBankAccountsMOnConfig
     . runGetTokens tokensFile
     . runWriteTokens tokensFile
     . runStateCached @Tokens
-    . runInputConst args
-    . runBankAccountsMOnConfig
     . runPersistLastImportedM
     . runApiTokenM
     . runGetTime

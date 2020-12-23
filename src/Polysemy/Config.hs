@@ -1,8 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -11,7 +8,6 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -22,9 +18,6 @@ module Polysemy.Config
     saveTokens,
     runGetConfig,
     runWriteConfig,
-    BankAccountsM (..),
-    getBankAccount,
-    runBankAccountsMOnConfig,
     runWriteTokens,
   )
 where
@@ -36,29 +29,18 @@ import Control.Monad
 import Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as S
 import Data.List (find)
+import qualified Data.Map as Map
 import Data.Maybe
 import Data.Time
 import Logger
 import Polysemy
+import Polysemy.BankAccount
 import Polysemy.Input
 import Polysemy.Output
 import Polysemy.State
 import Token
 import Types
 import Prelude
-
-data BankAccountsM m a where
-  GetBankAccount :: BankAccountsM m BankAccount
-
-$(makeSem ''BankAccountsM)
-
-runBankAccountsMOnConfig :: (Members '[State Config, Input Args] r) => InterpreterFor BankAccountsM r
-runBankAccountsMOnConfig = interpret $ \case
-  GetBankAccount -> do
-    config <- get @Config
-    args <- input @Args
-    let baList = config ^. bankAccounts
-    return $ fromJust $ find (\ba -> ba ^. Config.bankAccountId == Cli.bankAccountId args) baList
 
 runGetConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Input Config) r
 runGetConfig fp = interpret $ \case
@@ -69,11 +51,15 @@ runGetConfig fp = interpret $ \case
       Left e -> error e
       Right cfg -> return cfg
 
-runWriteTokens :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Output Tokens) r
+runWriteTokens :: (Members '[Logger, Embed IO, BankAccountsM] r) => FilePath -> InterpreterFor (Output Tokens) r
 runWriteTokens fp = interpret $ \case
   Output cfg -> do
     info $ "Writing tokens to " ++ fp
-    embed $ S.writeFile fp (encode cfg)
+    ecfg <- embed $ eitherDecodeFileStrict @TokensConfig fp
+    bankAccount <- getBankAccount
+    case ecfg of
+      Left e -> error e
+      Right (TokensConfig tokensCfg) -> embed $ S.writeFile fp (encode @TokensConfig $ TokensConfig $ Map.insert (bankAccount ^. bankInstitution) cfg tokensCfg)
 
 runWriteConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Output Config) r
 runWriteConfig fp = interpret $ \case

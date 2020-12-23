@@ -40,13 +40,16 @@ module Token
     authorizationUrl,
     runGetTokens,
     runGetToken,
+    TokensConfig (..),
   )
 where
 
+import Config (BankInstitution, bankInstitution)
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text
 import Data.Time
@@ -54,6 +57,7 @@ import GHC.Generics
 import Logger
 import Network.HTTP.Req
 import Polysemy
+import Polysemy.BankAccount
 import Polysemy.Input
 import Polysemy.State
 import Types
@@ -69,9 +73,17 @@ data Tokens
       }
   deriving (Eq, Generic, Show)
 
+newtype TokensConfig
+  = TokensConfig (Map.Map BankInstitution Tokens)
+  deriving stock (Eq, Generic, Show)
+
 $(makeLenses ''Tokens)
 
+$(makeLenses ''TokensConfig)
+
 $(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''Tokens)
+
+$(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''TokensConfig)
 
 configToken :: Tokens -> UTCTime -> Either InvalidTokenReason ValidToken
 configToken config currentTime =
@@ -185,11 +197,14 @@ runApiTokenMConst refresh access = interpret $ \case
   GetRefreshToken -> return refresh
   GetAccessToken -> return access
 
-runGetTokens :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Input Tokens) r
+runGetTokens :: (Members '[Logger, BankAccountsM, Embed IO] r) => FilePath -> InterpreterFor (Input Tokens) r
 runGetTokens fp = interpret $ \case
   Input -> do
     info $ "Loading tokens from " ++ fp
-    ecfg <- embed $ eitherDecodeFileStrict fp
+    ecfg <- embed $ eitherDecodeFileStrict @TokensConfig fp
+    bankAccount <- getBankAccount
     case ecfg of
       Left e -> error e
-      Right cfg -> return cfg
+      Right (TokensConfig cfg) -> case Map.lookup (bankAccount ^. bankInstitution) cfg of
+        Just bankcfg -> return bankcfg
+        Nothing -> error "Missing bank account config"
