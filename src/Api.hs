@@ -21,6 +21,8 @@ module Api
   )
 where
 
+import Config
+import Control.Lens
 import Control.Monad
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Text hiding (length)
@@ -35,7 +37,7 @@ import Types
 import Prelude hiding (log)
 
 data TransactionsApiM m a where
-  GetTransactionsApi :: Int -> Day -> TransactionsApiM m [Transaction]
+  GetTransactionsApi :: BankAccount -> Day -> TransactionsApiM m [Transaction]
 
 $(makeSem ''TransactionsApiM)
 
@@ -48,21 +50,21 @@ newtype TransactionsEndpoint
 
 runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, Error ApiError, Logger] r) => InterpreterFor TransactionsApiM r
 runTransactionsApiM = interpret $ \case
-  GetTransactionsApi bankAccountId fromDate -> do
-    etx <-
-      getFa
-        "bank_transactions"
-        ( "bank_account" =: bankAccountId
-            <> "from_date" =: fromDate
-            <> "sort" =: ("dated_on" :: Text)
-            <> "per_page" =: (100 :: Int)
-        )
-    case etx of
-      Right endpoint -> do
-        when (length tx == 100) (warn "WARNING: Number of transactions close to limit")
-        return tx
-        where
-          tx = bank_transactions endpoint
-      Left e -> throw e
--- this could be a good case to write as an "app" style thing to be interpreted
--- self contained bit of business logic
+  GetTransactionsApi bankAccount fromDate -> case bankAccount ^. bankInstitution of
+    Fa -> do
+      etx <-
+        getFa
+          "bank_transactions"
+          ( "bank_account" =: bankAccount ^. bankAccountId
+              <> "from_date" =: fromDate
+              <> "sort" =: ("dated_on" :: Text)
+              <> "per_page" =: (100 :: Int)
+          )
+      case etx of
+        Right endpoint -> do
+          when (length tx == 100) (warn "WARNING: Number of transactions close to limit")
+          return tx
+          where
+            tx = bank_transactions endpoint
+        Left e -> throw e
+    Monzo -> error "not supported yet"

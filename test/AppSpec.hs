@@ -81,7 +81,7 @@ testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "202
 testConfig :: Config
 testConfig =
   Config
-    { _bankAccounts = [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 19}]
+    { _bankAccounts = [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Fa}]
     }
 
 testTokens :: Tokens
@@ -272,13 +272,13 @@ spec = do
             r
               `shouldBe` ( [(Info, "Getting transactions after 2020-04-19"), (Warning, "WARNING: Number of transactions close to limit"), (Info, "Outputting last imported day of 2020-04-20"), (Info, "Number of transactions: 100")],
                            ( [updateConfig 1 (LastImported $ fromGregorian 2020 4 20) testConfig],
-                               ( [ transactions_100
-                                 ],
-                                 ( [],
-                                   ()
-                                 )
+                             ( [ transactions_100
+                               ],
+                               ( [],
+                                 ()
                                )
                              )
+                           )
                          )
     context "happy, deep path" $ do
       it "imports transactions, outputs them, updates config" $
@@ -317,7 +317,7 @@ spec = do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
                   tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
-                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 21}]
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (Info, "Outputting last imported day of 2020-04-21"),
@@ -345,7 +345,7 @@ spec = do
                           )
                           testCurrentTime
                       )
-                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 21}]
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),

@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
@@ -15,6 +16,8 @@ module Config
     BankAccount (..),
     bankAccountId,
     lastImported,
+    bankInstitution,
+    BankInstitution (..),
   )
 where
 
@@ -25,7 +28,11 @@ import GHC.Generics
 import Types
 import Prelude
 
-data BankAccount = BankAccount {_bankAccountId :: Int, _lastImported :: LastImported} deriving stock (Eq, Show)
+data BankInstitution = Fa | Monzo
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
+
+data BankAccount = BankAccount {_bankAccountId :: Int, _lastImported :: LastImported, _bankInstitution :: BankInstitution} deriving stock (Eq, Show)
 
 $(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''BankAccount)
 

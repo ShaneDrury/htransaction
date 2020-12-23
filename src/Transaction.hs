@@ -60,7 +60,7 @@ runTransactionsManager = interpret $ \case
   GetNewTransactions bankAccount -> do
     let (LastImported day) = bankAccount ^. lastImported
     info $ "Getting transactions after " ++ show day
-    tx <- getTransactionsApi (bankAccount ^. bankAccountId) day
+    tx <- getTransactionsApi bankAccount day
     unless (null tx) (persistLastImported (latestTransaction tx))
     return tx
 
