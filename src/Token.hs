@@ -44,7 +44,7 @@ module Token
   )
 where
 
-import Config (BankInstitution, bankInstitution)
+import Config (BankInstitution (..), bankInstitution)
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH

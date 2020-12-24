@@ -30,7 +30,13 @@ import Prelude
 
 data BankInstitution = Fa | Monzo
   deriving stock (Eq, Show, Generic, Ord)
-  deriving anyclass (FromJSON, ToJSON, ToJSONKey, FromJSONKey)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance ToJSONKey BankInstitution where
+  toJSONKey = genericToJSONKey defaultJSONKeyOptions
+
+instance FromJSONKey BankInstitution where
+  fromJSONKey = genericFromJSONKey defaultJSONKeyOptions
 
 data BankAccount = BankAccount {_bankAccountId :: Int, _lastImported :: LastImported, _bankInstitution :: BankInstitution} deriving stock (Eq, Show)
 
