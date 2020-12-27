@@ -40,6 +40,7 @@ dependencies:
 - hspec-discover
 - rainbow
 - co-log-polysemy
+- random
 
 library:
   source-dirs: src

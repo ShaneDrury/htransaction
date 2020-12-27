@@ -41,6 +41,7 @@ module Token
     runGetTokens,
     runGetToken,
     TokensConfig (..),
+    monzoAuthUrl,
   )
 where
 
@@ -59,6 +60,7 @@ import Network.HTTP.Req
 import Polysemy
 import Polysemy.BankAccount
 import Polysemy.Input
+import Polysemy.Random
 import Polysemy.State
 import Types
 import Prelude
@@ -146,12 +148,12 @@ withNewTokens TokenEndpoint {..} original currentTime =
 userAgentHeader :: Option scheme
 userAgentHeader = header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
 
-getAccessTokenNetwork :: String -> String -> String -> IO TokenEndpoint
-getAccessTokenNetwork cID secret authorizationCode = runReq defaultHttpConfig $ do
+getAccessTokenNetwork :: Url 'Https -> String -> String -> String -> IO TokenEndpoint
+getAccessTokenNetwork endpoint cID secret authorizationCode = runReq defaultHttpConfig $ do
   r <-
     req
       POST
-      (https "api.freeagent.com" /: "v2" /: "token_endpoint")
+      endpoint
       ( ReqBodyUrlEnc $
           "client_id" =: cID
             <> "client_secret" =: secret
@@ -165,12 +167,12 @@ getAccessTokenNetwork cID secret authorizationCode = runReq defaultHttpConfig $ 
   let body = responseBody r :: TokenEndpoint
   return body
 
-useRefreshToken :: String -> String -> String -> IO TokenEndpoint
-useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
+useRefreshToken :: Url 'Https -> String -> String -> String -> IO TokenEndpoint
+useRefreshToken endpoint cID secret refresh = runReq defaultHttpConfig $ do
   r <-
     req
       POST
-      (https "api.freeagent.com" /: "v2" /: "token_endpoint")
+      endpoint
       ( ReqBodyUrlEnc $
           "client_id" =: cID
             <> "client_secret" =: secret
@@ -184,6 +186,10 @@ useRefreshToken cID secret refresh = runReq defaultHttpConfig $ do
 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
+
+monzoAuthUrl :: String -> String -> String
+monzoAuthUrl clientId state =
+  "https://auth.monzo.com/?client_id=" <> clientId <> "&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground&response_type=code&state=" <> state
 
 toValidToken :: TokenEndpoint -> ValidToken
 toValidToken endpoint = ValidToken $ BS.pack $ access_token endpoint

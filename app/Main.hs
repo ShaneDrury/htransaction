@@ -20,6 +20,7 @@ import Polysemy.Cached
 import Polysemy.Config
 import Polysemy.Input
 import Polysemy.LastImported
+import Polysemy.Random
 import Token
 import Transaction
 import Types
@@ -39,6 +40,7 @@ runapp args@Args {..} =
     . runWriteTokens tokensFile
     . runStateCached @Tokens
     . runPersistLastImportedM
+    . runRandomROnIO
     . runApiTokenM
     . runGetTime
     . saveTokens

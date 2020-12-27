@@ -33,10 +33,12 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Time
 import Logger
+import Network.HTTP.Req
 import Polysemy
 import Polysemy.BankAccount
 import Polysemy.Input
 import Polysemy.Output
+import Polysemy.Random
 import Polysemy.State
 import Token
 import Types
@@ -80,17 +82,28 @@ runValidToken = interpret $ \case
     currentTime <- input
     put (oldTokens & tokenExpiresAt ?~ currentTime)
 
-runApiTokenM :: (Members '[Embed IO, State Tokens, Logger] r) => InterpreterFor ApiTokenM r
+institutionEndpoint :: BankInstitution -> Url 'Https
+institutionEndpoint institution = case institution of
+  Fa -> https "api.freeagent.com" /: "v2" /: "token_endpoint"
+  Monzo -> https "auth.monzo.com/"
+
+runApiTokenM :: (Members '[Embed IO, State Tokens, Logger, BankAccountsM, RandomM] r) => InterpreterFor ApiTokenM r
 runApiTokenM = interpret $ \case
   GetRefreshToken -> do
     config <- get @Tokens
+    institution <- _bankInstitution <$> getBankAccount
     warn "Trying to refresh tokens"
-    embed $ useRefreshToken (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
+    embed $ useRefreshToken (institutionEndpoint institution) (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
   GetAccessToken -> do
     config <- get @Tokens
-    embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
+    institution <- _bankInstitution <$> getBankAccount
+    case institution of
+      Fa -> embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
+      Monzo -> do
+        state <- randomString 30
+        embed $ putStrLn $ "Open and copy code: " <> monzoAuthUrl (config ^. clientID) state
     authorizationCode <- embed getLine
-    embed $ getAccessTokenNetwork (config ^. clientID) (config ^. clientSecret) authorizationCode
+    embed $ getAccessTokenNetwork (institutionEndpoint institution) (config ^. clientID) (config ^. clientSecret) authorizationCode
 
 doSaveTokens :: (Members '[Input UTCTime, State Tokens, ApiTokenM] r) => TokenEndpoint -> Sem r TokenEndpoint
 doSaveTokens tokens = do
