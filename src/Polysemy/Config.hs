@@ -27,6 +27,7 @@ import Config
 import Control.Lens
 import Control.Monad
 import Data.Aeson
+import Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString.Lazy.Char8 as S
 import Data.List (find)
 import qualified Data.Map as Map
@@ -61,13 +62,13 @@ runWriteTokens fp = interpret $ \case
     bankAccount <- getBankAccount
     case ecfg of
       Left e -> error e
-      Right (TokensConfig tokensCfg) -> embed $ S.writeFile fp (encode @TokensConfig $ TokensConfig $ Map.insert (bankAccount ^. bankInstitution) cfg tokensCfg)
+      Right (TokensConfig tokensCfg) -> embed $ S.writeFile fp (encodePretty @TokensConfig $ TokensConfig $ Map.insert (bankAccount ^. bankInstitution) cfg tokensCfg)
 
 runWriteConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Output Config) r
 runWriteConfig fp = interpret $ \case
   Output cfg -> do
     info $ "Writing config to " ++ fp
-    embed $ S.writeFile fp (encode cfg)
+    embed $ S.writeFile fp (encodePretty cfg)
 
 runValidToken :: (Members '[ApiTokenM, TokenM, State Tokens, Input UTCTime] r) => InterpreterFor ValidTokenM r
 runValidToken = interpret $ \case

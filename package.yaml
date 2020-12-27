@@ -41,6 +41,7 @@ dependencies:
 - rainbow
 - co-log-polysemy
 - random
+- aeson-pretty
 
 library:
   source-dirs: src
