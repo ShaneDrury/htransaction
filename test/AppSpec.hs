@@ -269,19 +269,19 @@ spec = do
       it "uses the access token if token not present in config" $
         happyRunner testConfig (testTokens & token .~ Nothing) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenAccess")
   describe "app" $ do
-    context "empty path"
-      $ it "imports nothing"
-      $ runAppEmpty app `shouldBe` ([(Info, "Number of transactions: 0")], ())
-    context "happy, simple path"
-      $ context "with two transactions"
-      $ it "imports them"
-      $ runAppSimple testTransactions app
-        `shouldBe` ( [(Info, "Number of transactions: 2")],
-                     ( [ testTransactions
-                       ],
-                       ()
-                     )
-                   )
+    context "empty path" $
+      it "imports nothing" $
+        runAppEmpty app `shouldBe` ([(Info, "Number of transactions: 0")], ())
+    context "happy, simple path" $
+      context "with two transactions" $
+        it "imports them" $
+          runAppSimple testTransactions app
+            `shouldBe` ( [(Info, "Number of transactions: 2")],
+                         ( [ testTransactions
+                           ],
+                           ()
+                         )
+                       )
     context "with 100 transactions" $ do
       let transactions_100 =
             replicate
@@ -340,10 +340,11 @@ spec = do
         case runAppDeep [Just testTransactions] testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
-            let updatedTokenConfig = testTokens &~ do
-                  token .= Just "accessTokenRefresh"
-                  refreshToken .= Just "refreshTokenRefresh"
-                  tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
+            let updatedTokenConfig =
+                  testTokens &~ do
+                    token .= Just "accessTokenRefresh"
+                    refreshToken .= Just "refreshTokenRefresh"
+                    tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
                 updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
@@ -362,16 +363,17 @@ spec = do
         case runAppDeep [Nothing, Just testTransactions] testConfig testTokens app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
-            let updatedTokenConfig = testTokens &~ do
-                  token .= Just "accessTokenRefresh"
-                  refreshToken .= Just "refreshTokenRefresh"
-                  tokenExpiresAt
-                    .= Just
-                      ( addUTCTime
-                          ( 86400 :: NominalDiffTime
-                          )
-                          testCurrentTime
-                      )
+            let updatedTokenConfig =
+                  testTokens &~ do
+                    token .= Just "accessTokenRefresh"
+                    refreshToken .= Just "refreshTokenRefresh"
+                    tokenExpiresAt
+                      .= Just
+                        ( addUTCTime
+                            ( 86400 :: NominalDiffTime
+                            )
+                            testCurrentTime
+                        )
                 updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),

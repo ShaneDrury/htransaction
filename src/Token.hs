@@ -50,14 +50,13 @@ import Polysemy.State
 import Types
 import Prelude
 
-data Tokens
-  = Tokens
-      { _token :: Maybe String,
-        _refreshToken :: Maybe String,
-        _clientID :: String,
-        _clientSecret :: String,
-        _tokenExpiresAt :: Maybe UTCTime
-      }
+data Tokens = Tokens
+  { _token :: Maybe String,
+    _refreshToken :: Maybe String,
+    _clientID :: String,
+    _clientSecret :: String,
+    _tokenExpiresAt :: Maybe UTCTime
+  }
   deriving stock (Eq, Show, Generic)
 
 newtype TokensConfig
@@ -99,13 +98,12 @@ runGetToken :: Members '[Input UTCTime, State Tokens] r => InterpreterFor TokenM
 runGetToken = interpret $ \case
   GetToken -> configToken <$> get @Tokens <*> input @UTCTime
 
-data TokenEndpoint
-  = TokenEndpoint
-      { access_token :: String,
-        token_type :: String,
-        expires_in :: Integer,
-        refresh_token :: Maybe String
-      }
+data TokenEndpoint = TokenEndpoint
+  { access_token :: String,
+    token_type :: String,
+    expires_in :: Integer,
+    refresh_token :: Maybe String
+  }
   deriving stock (Eq, Show)
   deriving anyclass (FromJSON)
   deriving stock (Generic)

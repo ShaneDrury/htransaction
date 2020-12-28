@@ -33,10 +33,9 @@ data BankAccount = BankAccount {_bankAccountId :: String, _lastImported :: LastI
 
 $(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''BankAccount)
 
-newtype Config
-  = Config
-      { _bankAccounts :: [BankAccount]
-      }
+newtype Config = Config
+  { _bankAccounts :: [BankAccount]
+  }
   deriving stock (Eq, Generic, Show)
 
 $(makeLenses ''BankAccount)

@@ -8,14 +8,13 @@ import GHC.Generics
 import Options.Generic
 import Prelude
 
-data Args
-  = Args
-      { outfile :: FilePath,
-        configFile :: FilePath,
-        tokensFile :: FilePath,
-        verbose :: Bool,
-        bankAccountId :: String
-      }
+data Args = Args
+  { outfile :: FilePath,
+    configFile :: FilePath,
+    tokensFile :: FilePath,
+    verbose :: Bool,
+    bankAccountId :: String
+  }
   deriving stock (Eq, Generic, Show)
 
 instance ParseRecord Args

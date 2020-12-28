@@ -29,10 +29,9 @@ data TransactionsApiM m a where
 
 $(makeSem ''TransactionsApiM)
 
-newtype TransactionsEndpoint
-  = TransactionsEndpoint
-      { bank_transactions :: [Transaction]
-      }
+newtype TransactionsEndpoint = TransactionsEndpoint
+  { bank_transactions :: [Transaction]
+  }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
 

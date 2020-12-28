@@ -28,19 +28,17 @@ data MonzoM v m a where
 
 $(makeSem ''MonzoM)
 
-data MonzoTransaction
-  = MonzoTransaction
-      { amount :: Int,
-        description :: String,
-        created :: UTCTime
-      }
+data MonzoTransaction = MonzoTransaction
+  { amount :: Int,
+    description :: String,
+    created :: UTCTime
+  }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
 
-newtype MonzoTransactionsEndpoint
-  = MonzoTransactionsEndpoint
-      { transactions :: [MonzoTransaction]
-      }
+newtype MonzoTransactionsEndpoint = MonzoTransactionsEndpoint
+  { transactions :: [MonzoTransaction]
+  }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
 
@@ -72,15 +70,17 @@ runMonzoM ::
 runMonzoM = interpret $ \case
   GetMonzo endpoint options -> do
     tkn <- getValidToken
-    result <- embed $ E.try $ do
-      r <- runReq defaultHttpConfig $ monzoRequest endpoint tkn options
-      return (responseBody r :: v)
+    result <- embed $
+      E.try $ do
+        r <- runReq defaultHttpConfig $ monzoRequest endpoint tkn options
+        return (responseBody r :: v)
     case result of
       Right res -> return $ Right (res :: v)
       Left err' ->
         if isUnauthorized err'
           then return $ Left Unauthorized
           else throw @HttpException err'
+
 -- idea - intercept this and log out more info - helps in reconciling
 -- or possibly inspect info and deduce it's splitting a bill
 -- in which case use the original merchant as the description?

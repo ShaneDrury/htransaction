@@ -48,11 +48,10 @@ newtype TransactionDate = TransactionDate Day
 instance CSV.ToField TransactionDate where
   toField (TransactionDate d) = BS.pack $ showGregorian d
 
-data Transaction
-  = Transaction
-      { dated_on :: TransactionDate,
-        description :: String,
-        amount :: String
-      }
+data Transaction = Transaction
+  { dated_on :: TransactionDate,
+    description :: String,
+    amount :: String
+  }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, CSV.ToRecord, ToJSON)

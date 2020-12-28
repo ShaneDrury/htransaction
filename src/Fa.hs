@@ -54,9 +54,10 @@ runFaM ::
 runFaM = interpret $ \case
   GetFa endpoint options -> do
     tkn <- getValidToken
-    result <- embed $ E.try $ do
-      r <- runReq defaultHttpConfig $ faRequest endpoint tkn options
-      return (responseBody r :: v)
+    result <- embed $
+      E.try $ do
+        r <- runReq defaultHttpConfig $ faRequest endpoint tkn options
+        return (responseBody r :: v)
     case result of
       Right res -> return $ Right (res :: v)
       Left err' ->
