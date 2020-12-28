@@ -1,16 +1,4 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
 module Polysemy.LastImported
   ( PersistLastImportedM (..),
@@ -27,7 +15,6 @@ import Data.Time
 import Logger
 import Polysemy
 import Polysemy.BankAccount
-import Polysemy.Config
 import Polysemy.Output
 import Polysemy.State
 import Types

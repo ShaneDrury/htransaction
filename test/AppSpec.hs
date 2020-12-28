@@ -1,10 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeApplications #-}
-
 module AppSpec
   ( spec,
   )
@@ -154,7 +147,7 @@ runFaMTest =
   interpret
     ( \case
         GetFa _ _ -> do
-          getValidToken
+          _ <- getValidToken
           mmtxs <- input @(Maybe (Maybe [Transaction]))
           case mmtxs of
             Just mtxs ->
@@ -169,7 +162,7 @@ runMonzoTest =
   interpret
     ( \case
         MZ.GetMonzo _ _ -> do
-          getValidToken
+          _ <- getValidToken
           mmtxs <- input @(Maybe (Maybe [Transaction]))
           case mmtxs of
             Just mtxs ->

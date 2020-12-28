@@ -1,20 +1,13 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
-module Monzo where
+module Monzo
+  ( MonzoM (..),
+    getMonzo,
+    runMonzoM,
+    MonzoTransaction (..),
+    MonzoTransactionsEndpoint (..),
+  )
+where
 
 import qualified Control.Exception as E
 import Control.Monad
@@ -27,7 +20,7 @@ import Polysemy
 import Polysemy.Error
 import Request
 import Token
-import Types
+import Types hiding (amount, description)
 import Prelude hiding (log)
 
 data MonzoM v m a where
@@ -52,13 +45,13 @@ newtype MonzoTransactionsEndpoint
   deriving anyclass (FromJSON, ToJSON)
 
 monzoRequest :: (MonadHttp m, FromJSON a) => Text -> ValidToken -> Option 'Https -> m (JsonResponse a)
-monzoRequest endpoint (ValidToken token) options =
+monzoRequest endpoint (ValidToken tkn) options =
   req
     GET
     (https "api.monzo.com" /: endpoint)
     NoReqBody
     jsonResponse
-    ( oAuth2Bearer token
+    ( oAuth2Bearer tkn
         <> header
           "User-Agent"
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
@@ -78,9 +71,9 @@ runMonzoM ::
   InterpreterFor (MonzoM v) r
 runMonzoM = interpret $ \case
   GetMonzo endpoint options -> do
-    token <- getValidToken
+    tkn <- getValidToken
     result <- embed $ E.try $ do
-      r <- runReq defaultHttpConfig $ monzoRequest endpoint token options
+      r <- runReq defaultHttpConfig $ monzoRequest endpoint tkn options
       return (responseBody r :: v)
     case result of
       Right res -> return $ Right (res :: v)
@@ -88,3 +81,11 @@ runMonzoM = interpret $ \case
         if isUnauthorized err'
           then return $ Left Unauthorized
           else throw @HttpException err'
+-- idea - intercept this and log out more info - helps in reconciling
+-- or possibly inspect info and deduce it's splitting a bill
+-- in which case use the original merchant as the description?
+-- could also spit out an extra comment
+
+-- possibly have to exclude pending items
+-- include a "to" date in api request
+-- can always have a bigger import window and let it dedupe

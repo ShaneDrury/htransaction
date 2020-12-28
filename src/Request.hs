@@ -1,34 +1,14 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
-module Request where
+module Request
+  ( isUnauthorized,
+  )
+where
 
-import qualified Control.Exception as E
 import Control.Lens
-import Control.Monad
-import Data.Aeson
-import Data.Text
-import Logger
 import qualified Network.HTTP.Client as H
 import Network.HTTP.Req
 import qualified Network.HTTP.Types.Status as Status
-import Polysemy
-import Polysemy.Error
-import Token
-import Types
 import Prelude hiding (log)
 
 $(makePrisms ''HttpException) -- req

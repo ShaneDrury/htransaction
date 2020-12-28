@@ -1,7 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeApplications #-}
-
 module Main
   ( main,
   )
@@ -10,23 +6,57 @@ where
 import Api
 import App
 import Cli
-import Config
+import Colog.Polysemy.Effect
+import Config hiding (bankAccountId)
 import Control.Monad
+import Data.Time.Clock
 import Fa
 import Logger
 import Monzo
+import Network.HTTP.Req
 import Polysemy
 import Polysemy.BankAccount
 import Polysemy.Cached
 import Polysemy.Config
+import Polysemy.Error
 import Polysemy.Input
 import Polysemy.LastImported
+import Polysemy.Output
 import Polysemy.Random
+import Polysemy.State
+import Polysemy.Trace
 import Token
 import Transaction
 import Types
 import Prelude
 
+runapp ::
+  Args ->
+  Sem
+    '[ TransactionsManager,
+       TransactionsApiM,
+       Output [Transaction],
+       MonzoM MonzoTransactionsEndpoint,
+       FaM TransactionsEndpoint,
+       ValidTokenM,
+       TokenM,
+       Input UTCTime,
+       ApiTokenM,
+       RandomM,
+       PersistLastImportedM,
+       State Tokens,
+       BankAccountsM,
+       Input Args,
+       State Config,
+       Log LogMsg,
+       Trace,
+       Error HttpException,
+       Error ApiError,
+       Error AppError,
+       Embed IO
+     ]
+    a ->
+  IO (Either AppError a)
 runapp args@Args {..} =
   runM
     . handleErrors

@@ -1,6 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 module Cli
   ( Args (..),
     getArgs,
@@ -19,7 +16,7 @@ data Args
         verbose :: Bool,
         bankAccountId :: String
       }
-  deriving (Eq, Generic, Show)
+  deriving stock (Eq, Generic, Show)
 
 instance ParseRecord Args
 

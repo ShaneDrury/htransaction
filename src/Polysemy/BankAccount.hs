@@ -1,19 +1,4 @@
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
 module Polysemy.BankAccount
   ( BankAccountsM (..),
@@ -26,17 +11,11 @@ import Cli
 import Config
 import Control.Lens
 import Control.Monad
-import Data.Aeson
-import qualified Data.ByteString.Lazy.Char8 as S
 import Data.List (find)
 import Data.Maybe
-import Data.Time
-import Logger
 import Polysemy
 import Polysemy.Input
-import Polysemy.Output
 import Polysemy.State
-import Types
 import Prelude
 
 data BankAccountsM m a where

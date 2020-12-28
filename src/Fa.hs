@@ -1,18 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
 module Fa
   ( FaM (..),
@@ -23,14 +9,11 @@ module Fa
 where
 
 import qualified Control.Exception as E
-import Control.Lens
 import Control.Monad
 import Data.Aeson
 import Data.Text
 import Logger
-import qualified Network.HTTP.Client as H
 import Network.HTTP.Req
-import qualified Network.HTTP.Types.Status as Status
 import Polysemy
 import Polysemy.Error
 import Request
@@ -44,13 +27,13 @@ data FaM v m a where
 $(makeSem ''FaM)
 
 faRequest :: (MonadHttp m, FromJSON a) => Text -> ValidToken -> Option 'Https -> m (JsonResponse a)
-faRequest endpoint (ValidToken token) options =
+faRequest endpoint (ValidToken tkn) options =
   req
     GET
     (https "api.freeagent.com" /: "v2" /: endpoint)
     NoReqBody
     jsonResponse
-    ( oAuth2Bearer token
+    ( oAuth2Bearer tkn
         <> header
           "User-Agent"
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
@@ -70,9 +53,9 @@ runFaM ::
   InterpreterFor (FaM v) r
 runFaM = interpret $ \case
   GetFa endpoint options -> do
-    token <- getValidToken
+    tkn <- getValidToken
     result <- embed $ E.try $ do
-      r <- runReq defaultHttpConfig $ faRequest endpoint token options
+      r <- runReq defaultHttpConfig $ faRequest endpoint tkn options
       return (responseBody r :: v)
     case result of
       Right res -> return $ Right (res :: v)

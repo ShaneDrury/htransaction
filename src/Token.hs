@@ -1,18 +1,4 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
 module Token
   ( runGetTime,
@@ -60,7 +46,6 @@ import Network.HTTP.Req
 import Polysemy
 import Polysemy.BankAccount
 import Polysemy.Input
-import Polysemy.Random
 import Polysemy.State
 import Types
 import Prelude
@@ -73,11 +58,11 @@ data Tokens
         _clientSecret :: String,
         _tokenExpiresAt :: Maybe UTCTime
       }
-  deriving (Eq, Generic, Show)
+  deriving stock (Eq, Show, Generic)
 
 newtype TokensConfig
   = TokensConfig (Map.Map BankInstitution Tokens)
-  deriving stock (Eq, Generic, Show)
+  deriving stock (Eq, Show, Generic)
 
 $(makeLenses ''Tokens)
 
@@ -121,7 +106,9 @@ data TokenEndpoint
         expires_in :: Integer,
         refresh_token :: Maybe String
       }
-  deriving (Eq, Generic, Show, FromJSON)
+  deriving stock (Eq, Show)
+  deriving anyclass (FromJSON)
+  deriving stock (Generic)
 
 data ApiTokenM m a where
   GetRefreshToken :: ApiTokenM m TokenEndpoint

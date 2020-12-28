@@ -1,18 +1,4 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
 module Api
   ( TransactionsApiM (..),
@@ -28,7 +14,6 @@ import Control.Monad
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Text hiding (length)
 import Data.Time
-import Data.Time.Clock
 import Fa
 import GHC.Generics (Generic)
 import Logger
@@ -52,7 +37,7 @@ newtype TransactionsEndpoint
   deriving anyclass (FromJSON, ToJSON)
 
 monzoToTransaction :: MonzoTransaction -> Transaction
-monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = description, amount = show $ fromIntegral amount / 100.0}
+monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = description, amount = show (fromIntegral amount / 100.0 :: Double)}
 
 runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, MonzoM MonzoTransactionsEndpoint, Error ApiError, Logger] r) => InterpreterFor TransactionsApiM r
 runTransactionsApiM = interpret $ \case
