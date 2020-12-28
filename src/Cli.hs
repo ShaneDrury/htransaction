@@ -17,7 +17,7 @@ data Args
         configFile :: FilePath,
         tokensFile :: FilePath,
         verbose :: Bool,
-        bankAccountId :: Int
+        bankAccountId :: String
       }
   deriving (Eq, Generic, Show)
 

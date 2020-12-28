@@ -86,7 +86,7 @@ runValidToken = interpret $ \case
 institutionEndpoint :: BankInstitution -> Url 'Https
 institutionEndpoint institution = case institution of
   Fa -> https "api.freeagent.com" /: "v2" /: "token_endpoint"
-  Monzo -> https "auth.monzo.com/"
+  Monzo -> https "api.monzo.com" /: "oauth2" /: "token"
 
 runApiTokenM :: (Members '[Embed IO, State Tokens, Logger, BankAccountsM, RandomM] r) => InterpreterFor ApiTokenM r
 runApiTokenM = interpret $ \case

@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
 module AppSpec
@@ -19,6 +20,7 @@ import Data.Maybe (fromJust)
 import Data.Time
 import Fa
 import Logger
+import qualified Monzo as MZ
 import qualified Network.HTTP.Req as H
 import Polysemy
 import Polysemy.BankAccount
@@ -82,7 +84,7 @@ testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "202
 testConfig :: Config
 testConfig =
   Config
-    { _bankAccounts = [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Fa}]
+    { _bankAccounts = [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Fa}]
     }
 
 testTokens :: Tokens
@@ -119,6 +121,20 @@ transactionsEndpoint tx =
     { bank_transactions = tx
     }
 
+tx2monzo :: Transaction -> MZ.MonzoTransaction
+tx2monzo Transaction {..} =
+  MZ.MonzoTransaction
+    { created = UTCTime (fromGregorian 2020 4 20) (0 :: DiffTime),
+      description = "Foo",
+      amount = 12300
+    }
+
+monzoTransactionsEndpoint :: [Transaction] -> MZ.MonzoTransactionsEndpoint
+monzoTransactionsEndpoint tx =
+  MZ.MonzoTransactionsEndpoint
+    { transactions = tx2monzo <$> tx
+    }
+
 testTransactions :: [Transaction]
 testTransactions =
   [ Transaction
@@ -148,8 +164,23 @@ runFaMTest =
             Nothing -> return $ Right $ transactionsEndpoint []
     )
 
+runMonzoTest :: Members '[Input (Maybe (Maybe [Transaction])), Error ApiError, ValidTokenM] r => InterpreterFor (MZ.MonzoM MZ.MonzoTransactionsEndpoint) r
+runMonzoTest =
+  interpret
+    ( \case
+        MZ.GetMonzo _ _ -> do
+          getValidToken
+          mmtxs <- input @(Maybe (Maybe [Transaction]))
+          case mmtxs of
+            Just mtxs ->
+              case mtxs of
+                Just txs -> return $ Right $ monzoTransactionsEndpoint txs
+                Nothing -> return $ Left Unauthorized
+            Nothing -> return $ Right $ monzoTransactionsEndpoint []
+    )
+
 testArgs :: Args
-testArgs = Args {Cli.bankAccountId = 1, outfile = "", configFile = "", tokensFile = "", verbose = True}
+testArgs = Args {Cli.bankAccountId = "1", outfile = "", configFile = "", tokensFile = "", verbose = True}
 
 runAppDeep ::
   [Maybe [Transaction]] ->
@@ -158,6 +189,7 @@ runAppDeep ::
   Sem
     '[ TransactionsManager,
        TransactionsApiM,
+       MZ.MonzoM MZ.MonzoTransactionsEndpoint,
        FaM TransactionsEndpoint,
        ValidTokenM,
        TokenM,
@@ -199,6 +231,7 @@ runAppDeep tx config tokens =
     . runGetToken
     . runValidToken
     . runFaMTest
+    . runMonzoTest
     . retryOnUnauthorized @TransactionsEndpoint
     . runTransactionsApiM
     . runTransactionsManager
@@ -272,7 +305,7 @@ spec = do
           Right r ->
             r
               `shouldBe` ( [(Info, "Getting transactions after 2020-04-19"), (Warning, "WARNING: Number of transactions close to limit"), (Info, "Outputting last imported day of 2020-04-20"), (Info, "Number of transactions: 100")],
-                           ( [updateConfig 1 (LastImported $ fromGregorian 2020 4 20) testConfig],
+                           ( [updateConfig "1" (LastImported $ fromGregorian 2020 4 20) testConfig],
                              ( [ transactions_100
                                ],
                                ( [],
@@ -291,7 +324,7 @@ spec = do
                              (Info, "Outputting last imported day of 2020-04-21"),
                              (Info, "Number of transactions: 2")
                            ],
-                           ( [updateConfig 1 (LastImported $ fromGregorian 2020 4 21) testConfig],
+                           ( [updateConfig "1" (LastImported $ fromGregorian 2020 4 21) testConfig],
                              ( [ testTransactions
                                ],
                                ( [],
@@ -318,7 +351,7 @@ spec = do
                   token .= Just "accessTokenRefresh"
                   refreshToken .= Just "refreshTokenRefresh"
                   tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
-                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (Info, "Outputting last imported day of 2020-04-21"),
@@ -346,7 +379,7 @@ spec = do
                           )
                           testCurrentTime
                       )
-                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = 1, _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),

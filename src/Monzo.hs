@@ -14,23 +14,15 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Fa
-  ( FaM (..),
-    getFa,
-    runFaM,
-    retryOnUnauthorized,
-  )
-where
+module Monzo where
 
 import qualified Control.Exception as E
-import Control.Lens
 import Control.Monad
 import Data.Aeson
 import Data.Text
-import Logger
-import qualified Network.HTTP.Client as H
+import Data.Time.Clock
+import GHC.Generics (Generic)
 import Network.HTTP.Req
-import qualified Network.HTTP.Types.Status as Status
 import Polysemy
 import Polysemy.Error
 import Request
@@ -38,16 +30,32 @@ import Token
 import Types
 import Prelude hiding (log)
 
-data FaM v m a where
-  GetFa :: Text -> Option 'Https -> FaM v m (Either ApiError v)
+data MonzoM v m a where
+  GetMonzo :: Text -> Option 'Https -> MonzoM v m (Either ApiError v)
 
-$(makeSem ''FaM)
+$(makeSem ''MonzoM)
 
-faRequest :: (MonadHttp m, FromJSON a) => Text -> ValidToken -> Option 'Https -> m (JsonResponse a)
-faRequest endpoint (ValidToken token) options =
+data MonzoTransaction
+  = MonzoTransaction
+      { amount :: Int,
+        description :: String,
+        created :: UTCTime
+      }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+newtype MonzoTransactionsEndpoint
+  = MonzoTransactionsEndpoint
+      { transactions :: [MonzoTransaction]
+      }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+monzoRequest :: (MonadHttp m, FromJSON a) => Text -> ValidToken -> Option 'Https -> m (JsonResponse a)
+monzoRequest endpoint (ValidToken token) options =
   req
     GET
-    (https "api.freeagent.com" /: "v2" /: endpoint)
+    (https "api.monzo.com" /: endpoint)
     NoReqBody
     jsonResponse
     ( oAuth2Bearer token
@@ -57,7 +65,7 @@ faRequest endpoint (ValidToken token) options =
         <> options
     )
 
-runFaM ::
+runMonzoM ::
   forall v r.
   ( Members
       '[ Embed IO,
@@ -67,12 +75,12 @@ runFaM ::
       r,
     FromJSON v
   ) =>
-  InterpreterFor (FaM v) r
-runFaM = interpret $ \case
-  GetFa endpoint options -> do
+  InterpreterFor (MonzoM v) r
+runMonzoM = interpret $ \case
+  GetMonzo endpoint options -> do
     token <- getValidToken
     result <- embed $ E.try $ do
-      r <- runReq defaultHttpConfig $ faRequest endpoint token options
+      r <- runReq defaultHttpConfig $ monzoRequest endpoint token options
       return (responseBody r :: v)
     case result of
       Right res -> return $ Right (res :: v)
@@ -80,27 +88,3 @@ runFaM = interpret $ \case
         if isUnauthorized err'
           then return $ Left Unauthorized
           else throw @HttpException err'
-
-retryOnUnauthorized ::
-  forall v r a.
-  ( Members
-      '[ Logger,
-         FaM v,
-         ValidTokenM
-       ]
-      r
-  ) =>
-  Sem r a ->
-  Sem r a
-retryOnUnauthorized =
-  intercept @(FaM v)
-    ( \case
-        GetFa endpoint option -> do
-          r <- getFa @v endpoint option
-          case r of
-            Left Unauthorized -> do
-              err "Unauthorized"
-              invalidateTokens
-              getFa @v endpoint option
-            s -> return s
-    )

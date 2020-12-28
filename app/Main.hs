@@ -14,6 +14,7 @@ import Config
 import Control.Monad
 import Fa
 import Logger
+import Monzo
 import Polysemy
 import Polysemy.BankAccount
 import Polysemy.Cached
@@ -47,6 +48,7 @@ runapp args@Args {..} =
     . runGetToken
     . runValidToken
     . runFaM @TransactionsEndpoint
+    . runMonzoM @MonzoTransactionsEndpoint
     . retryOnUnauthorized
     . runOutputOnCsv outfile
     . runTransactionsApiM

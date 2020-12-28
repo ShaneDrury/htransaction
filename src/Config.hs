@@ -38,7 +38,7 @@ instance ToJSONKey BankInstitution where
 instance FromJSONKey BankInstitution where
   fromJSONKey = genericFromJSONKey defaultJSONKeyOptions
 
-data BankAccount = BankAccount {_bankAccountId :: Int, _lastImported :: LastImported, _bankInstitution :: BankInstitution} deriving stock (Eq, Show)
+data BankAccount = BankAccount {_bankAccountId :: String, _lastImported :: LastImported, _bankInstitution :: BankInstitution} deriving stock (Eq, Show)
 
 $(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''BankAccount)
 
@@ -54,8 +54,8 @@ $(makeLenses ''Config)
 
 $(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''Config)
 
-lastImportedById :: Int -> Traversal' Config LastImported
+lastImportedById :: String -> Traversal' Config LastImported
 lastImportedById bID = bankAccounts . traversed . filtered (\ba -> _bankAccountId ba == bID) . lastImported
 
-updateConfig :: Int -> LastImported -> Config -> Config
+updateConfig :: String -> LastImported -> Config -> Config
 updateConfig bID newLastImported config = config & lastImportedById bID .~ newLastImported

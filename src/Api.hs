@@ -8,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
@@ -27,9 +28,11 @@ import Control.Monad
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Text hiding (length)
 import Data.Time
+import Data.Time.Clock
 import Fa
 import GHC.Generics (Generic)
 import Logger
+import Monzo
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
@@ -48,7 +51,10 @@ newtype TransactionsEndpoint
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
 
-runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, Error ApiError, Logger] r) => InterpreterFor TransactionsApiM r
+monzoToTransaction :: MonzoTransaction -> Transaction
+monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = description, amount = show $ fromIntegral amount / 100.0}
+
+runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, MonzoM MonzoTransactionsEndpoint, Error ApiError, Logger] r) => InterpreterFor TransactionsApiM r
 runTransactionsApiM = interpret $ \case
   GetTransactionsApi bankAccount fromDate -> case bankAccount ^. bankInstitution of
     Fa -> do
@@ -67,4 +73,15 @@ runTransactionsApiM = interpret $ \case
           where
             tx = bank_transactions endpoint
         Left e -> throw e
-    Monzo -> error "not supported yet"
+    Monzo -> do
+      etx <-
+        getMonzo @MonzoTransactionsEndpoint
+          "transactions"
+          ( "account_id" =: bankAccount ^. bankAccountId
+              <> "since" =: fromDate
+          )
+      case etx of
+        Right endpoint -> return $ monzoToTransaction <$> txs
+          where
+            txs = transactions endpoint
+        Left e -> throw e
