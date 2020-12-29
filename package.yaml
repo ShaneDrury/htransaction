@@ -42,6 +42,10 @@ dependencies:
 - co-log-polysemy
 - random
 - aeson-pretty
+- persistent
+- persistent-sqlite
+- persistent-template
+- esqueleto
 
 library:
   source-dirs: src
