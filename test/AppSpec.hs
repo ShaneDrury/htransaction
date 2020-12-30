@@ -180,7 +180,7 @@ runMonzoTest =
     )
 
 testArgs :: Args
-testArgs = Args {Cli.bankAccountId = "1", outfile = "", configFile = "", tokensFile = "", verbose = True}
+testArgs = Args {Cli.bankAccountId = "1", outfile = "", configFile = "", tokensFile = "", verbose = True, dbFile = ""}
 
 runAppDeep ::
   [Maybe [Transaction]] ->

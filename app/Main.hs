@@ -10,6 +10,7 @@ import Colog.Polysemy.Effect
 import Config hiding (bankAccountId)
 import Control.Monad
 import Data.Time.Clock
+import qualified Db as DB
 import Fa
 import Logger
 import Monzo
@@ -38,6 +39,7 @@ runapp ::
        TransactionsApiM,
        Output [Transaction],
        Output [MonzoTransaction],
+       DB.DbM,
        MonzoM MonzoTransactionsEndpoint,
        FaM TransactionsEndpoint,
        ValidTokenM,
@@ -81,6 +83,7 @@ runapp args@Args {..} =
     . runValidToken
     . runFaM @TransactionsEndpoint
     . runMonzoM @MonzoTransactionsEndpoint
+    . DB.runDbMOnSqlite dbFile
     . outputMonzoOnDb
     . outputMonzoTransactions
     . retryOnUnauthorized

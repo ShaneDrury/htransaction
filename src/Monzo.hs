@@ -18,7 +18,6 @@ import Data.Aeson
 import Data.Text
 import Data.Time.Clock
 import Database.Esqueleto
-import qualified Database.Persist.Sqlite as P
 import qualified Db as DB
 import GHC.Generics (Generic)
 import Network.HTTP.Req
@@ -124,6 +123,6 @@ toDbTransaction MonzoTransaction {..} =
       transactionOriginalTransactionId = pack <$> original_transaction_id metadata
     }
 
-outputMonzoOnDb :: (Members '[Embed IO] r) => InterpreterFor (Output [MonzoTransaction]) r
+outputMonzoOnDb :: (Members '[DB.DbM] r) => InterpreterFor (Output [MonzoTransaction]) r
 outputMonzoOnDb = interpret $ \case
-  Output txs -> embed $ P.runSqlite ":memory:" (insertMany_ (toDbTransaction <$> txs))
+  Output txs -> DB.runQuery (insertMany_ (toDbTransaction <$> txs))

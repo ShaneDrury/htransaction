@@ -13,7 +13,8 @@ data Args = Args
     configFile :: FilePath,
     tokensFile :: FilePath,
     verbose :: Bool,
-    bankAccountId :: String
+    bankAccountId :: String,
+    dbFile :: FilePath
   }
   deriving stock (Eq, Generic, Show)
 

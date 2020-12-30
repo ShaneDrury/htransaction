@@ -10,7 +10,6 @@ where
 
 import Config
 import Database.Esqueleto
-import qualified Database.Persist.Sqlite as P
 import qualified Db as DB
 import Logger
 import Polysemy
@@ -24,14 +23,14 @@ data AppM m a where
 
 $(makeSem ''AppM)
 
-runWithDb :: (Members '[Embed IO, BankAccountsM, AppM] r) => Sem r a -> Sem r a
+runWithDb :: (Members '[DB.DbM, BankAccountsM, AppM] r) => Sem r a -> Sem r a
 runWithDb = intercept @AppM $ \case
   SyncTransactions -> do
     institution <- getInstitution
     case institution of
       Fa -> syncTransactions
       Monzo -> do
-        embed $ P.runSqlite ":memory:" (runMigration DB.migrateAll)
+        DB.runQuery $ runMigration DB.migrateAll
         syncTransactions
 
 runApp :: (Members '[BankAccountsM, TransactionsManager, Output [Transaction], Logger] r) => InterpreterFor AppM r
