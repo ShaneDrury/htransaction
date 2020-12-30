@@ -7,12 +7,12 @@
 
 module Db (Transaction (..), migrateAll, TransactionId, relatedTransaction) where
 
+import Data.Text
 import Data.Time.Clock
+import Database.Esqueleto
 import qualified Database.Persist.Sqlite as P
 import Database.Persist.TH
 import Prelude
-import Database.Esqueleto
-import Data.Text
 
 share
   [mkPersist sqlSettings, mkMigrate "migrateAll"]
@@ -33,3 +33,6 @@ relatedTransaction :: Transaction -> SqlPersistM (Maybe (Entity Transaction))
 relatedTransaction tx = case transactionOriginalTransactionId tx of
   Just uuid -> findByUuid uuid
   Nothing -> return Nothing
+
+-- TODO: wrap input/output transactions
+-- and persist/modify, no need to add another sem yet

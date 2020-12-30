@@ -4,7 +4,7 @@ module AppSpec
 where
 
 import Api
-import App (app)
+import App (AppM (..), runApp, syncTransactions)
 import Cli
 import Config
 import Control.Lens
@@ -30,6 +30,9 @@ import Transaction
 import Types
 import Prelude
 
+app :: (Members '[AppM] r) => Sem r ()
+app = syncTransactions
+
 runTransactionsManagerEmpty :: InterpreterFor TransactionsManager r
 runTransactionsManagerEmpty = interpret $ \case
   GetNewTransactions _ -> return []
@@ -43,7 +46,7 @@ runGetConfigSimple cfg = interpret $ \case
   Get -> return cfg
   Put _ -> return ()
 
-runAppEmpty :: Sem '[BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
+runAppEmpty :: Sem '[AppM, BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
 runAppEmpty =
   run
     . runOutputList @LogMsg
@@ -53,8 +56,9 @@ runAppEmpty =
     . runInputConst testArgs
     . runGetConfigSimple testConfig
     . runBankAccountsMOnConfig
+    . runApp
 
-runAppSimple :: [Transaction] -> Sem '[BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ([[Transaction]], ()))
+runAppSimple :: [Transaction] -> Sem '[AppM, BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ([[Transaction]], ()))
 runAppSimple transactions =
   run
     . runOutputList @LogMsg
@@ -64,6 +68,7 @@ runAppSimple transactions =
     . runInputConst testArgs
     . runGetConfigSimple testConfig
     . runBankAccountsMOnConfig
+    . runApp
 
 testTokenExpiresAt :: Maybe UTCTime
 testTokenExpiresAt = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-09"
@@ -180,7 +185,8 @@ runAppDeep ::
   Config ->
   Tokens ->
   Sem
-    '[ TransactionsManager,
+    '[ AppM,
+       TransactionsManager,
        TransactionsApiM,
        MZ.MonzoM MZ.MonzoTransactionsEndpoint,
        FaM TransactionsEndpoint,
@@ -228,6 +234,7 @@ runAppDeep tx config tokens =
     . retryOnUnauthorized @TransactionsEndpoint
     . runTransactionsApiM
     . runTransactionsManager
+    . runApp
 
 spec :: Spec
 spec = do

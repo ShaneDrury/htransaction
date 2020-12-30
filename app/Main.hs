@@ -33,7 +33,8 @@ import Prelude
 runapp ::
   Args ->
   Sem
-    '[ TransactionsManager,
+    '[ AppM,
+       TransactionsManager,
        TransactionsApiM,
        Output [Transaction],
        MonzoM MonzoTransactionsEndpoint,
@@ -83,11 +84,16 @@ runapp args@Args {..} =
     . runOutputOnCsv outfile
     . runTransactionsApiM
     . runTransactionsManager
+    . runApp
+    . runWithDb
+
+runSync :: (Members '[AppM] r) => Sem r ()
+runSync = syncTransactions
 
 main :: IO ()
 main = do
   options <- getArgs
-  result <- runapp options app
+  result <- runapp options runSync
   case result of
     Left e -> print e
     Right () -> return ()
