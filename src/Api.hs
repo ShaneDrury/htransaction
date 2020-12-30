@@ -22,7 +22,7 @@ import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
 import Types
-import Prelude hiding (log)
+import Prelude hiding (id)
 
 data TransactionsApiM m a where
   GetTransactionsApi :: BankAccount -> Day -> TransactionsApiM m [Transaction]

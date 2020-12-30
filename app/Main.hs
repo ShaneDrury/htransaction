@@ -37,6 +37,7 @@ runapp ::
        TransactionsManager,
        TransactionsApiM,
        Output [Transaction],
+       Output [MonzoTransaction],
        MonzoM MonzoTransactionsEndpoint,
        FaM TransactionsEndpoint,
        ValidTokenM,
@@ -80,6 +81,8 @@ runapp args@Args {..} =
     . runValidToken
     . runFaM @TransactionsEndpoint
     . runMonzoM @MonzoTransactionsEndpoint
+    . outputMonzoOnDb
+    . outputMonzoTransactions
     . retryOnUnauthorized
     . runOutputOnCsv outfile
     . runTransactionsApiM

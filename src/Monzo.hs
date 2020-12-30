@@ -6,6 +6,9 @@ module Monzo
     runMonzoM,
     MonzoTransaction (..),
     MonzoTransactionsEndpoint (..),
+    outputMonzoTransactions,
+    outputMonzoOnDb,
+    MonzoMetadata (..),
   )
 where
 
@@ -14,33 +17,45 @@ import Control.Monad
 import Data.Aeson
 import Data.Text
 import Data.Time.Clock
+import Database.Esqueleto
+import qualified Database.Persist.Sqlite as P
+import qualified Db as DB
 import GHC.Generics (Generic)
 import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
+import Polysemy.Output
 import Request
 import Token
 import Types hiding (amount, description)
-import Prelude hiding (log)
+import Prelude hiding (id)
 
 data MonzoM v m a where
   GetMonzo :: Text -> Option 'Https -> MonzoM v m (Either ApiError v)
 
 $(makeSem ''MonzoM)
 
+data MonzoMetadata = MonzoMetadata
+  { original_transaction_id :: Maybe String
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON)
+
 data MonzoTransaction = MonzoTransaction
   { amount :: Int,
     description :: String,
-    created :: UTCTime
+    created :: UTCTime,
+    id :: String,
+    metadata :: MonzoMetadata
   }
   deriving stock (Eq, Generic, Show)
-  deriving anyclass (FromJSON, ToJSON)
+  deriving anyclass (FromJSON)
 
 newtype MonzoTransactionsEndpoint = MonzoTransactionsEndpoint
   { transactions :: [MonzoTransaction]
   }
   deriving stock (Eq, Generic, Show)
-  deriving anyclass (FromJSON, ToJSON)
+  deriving anyclass (FromJSON)
 
 monzoRequest :: (MonadHttp m, FromJSON a) => Text -> ValidToken -> Option 'Https -> m (JsonResponse a)
 monzoRequest endpoint (ValidToken tkn) options =
@@ -89,3 +104,26 @@ runMonzoM = interpret $ \case
 -- possibly have to exclude pending items
 -- include a "to" date in api request
 -- can always have a bigger import window and let it dedupe
+
+outputMonzoTransactions :: (Members '[MonzoM MonzoTransactionsEndpoint, Output [MonzoTransaction]] r) => Sem r a -> Sem r a
+outputMonzoTransactions = intercept $ \case
+  GetMonzo endpoint options -> do
+    etxs <- getMonzo endpoint options
+    case etxs of
+      Right txs -> output $ transactions txs
+      _ -> return ()
+    return etxs
+
+toDbTransaction :: MonzoTransaction -> DB.Transaction
+toDbTransaction MonzoTransaction {..} =
+  DB.Transaction
+    { transactionDescription = pack description,
+      transactionAmount = amount,
+      transactionUuid = pack id,
+      transactionDateTime = created,
+      transactionOriginalTransactionId = pack <$> original_transaction_id metadata
+    }
+
+outputMonzoOnDb :: (Members '[Embed IO] r) => InterpreterFor (Output [MonzoTransaction]) r
+outputMonzoOnDb = interpret $ \case
+  Output txs -> embed $ P.runSqlite ":memory:" (insertMany_ (toDbTransaction <$> txs))

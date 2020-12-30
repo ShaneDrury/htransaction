@@ -124,7 +124,9 @@ tx2monzo Transaction {..} =
   MZ.MonzoTransaction
     { created = UTCTime (fromGregorian 2020 4 20) (0 :: DiffTime),
       description = "Foo",
-      amount = 12300
+      amount = 12300,
+      id = "asdf",
+      metadata = MZ.MonzoMetadata {original_transaction_id = Nothing}
     }
 
 monzoTransactionsEndpoint :: [Transaction] -> MZ.MonzoTransactionsEndpoint
