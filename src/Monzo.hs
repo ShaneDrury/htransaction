@@ -113,16 +113,25 @@ outputMonzoTransactions = intercept $ \case
       _ -> return ()
     return etxs
 
-toDbTransaction :: MonzoTransaction -> DB.Transaction
+toDbTransaction :: MonzoTransaction -> DB.MonzoTransaction
 toDbTransaction MonzoTransaction {..} =
-  DB.Transaction
-    { transactionDescription = pack description,
-      transactionAmount = amount,
-      transactionUuid = pack id,
-      transactionDateTime = created,
-      transactionOriginalTransactionId = pack <$> original_transaction_id metadata
+  DB.MonzoTransaction
+    { monzoTransactionDescription = pack description,
+      monzoTransactionAmount = amount,
+      monzoTransactionUuid = pack id,
+      monzoTransactionDateTime = created,
+      monzoTransactionOriginalTransactionId = pack <$> original_transaction_id metadata
     }
 
 outputMonzoOnDb :: (Members '[DB.DbM] r) => InterpreterFor (Output [MonzoTransaction]) r
 outputMonzoOnDb = interpret $ \case
   Output txs -> DB.runQuery (insertMany_ (toDbTransaction <$> txs))
+-- TODO: Insert only if don't exist
+-- can constrain unique id
+
+-- TODO: Instead of storing ids for existing
+-- could store id of matching transaction
+-- maybe a data consistency issue?
+-- also depends on syncing that one first
+
+-- TODO : switch to getInstitution

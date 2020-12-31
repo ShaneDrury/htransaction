@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Db (Transaction (..), migrateAll, TransactionId, relatedTransaction, DbM (..), runQuery, runDbMOnSqlite) where
+module Db (MonzoTransaction (..), migrateAll, MonzoTransactionId, relatedTransaction, DbM (..), runQuery, runDbMOnSqlite) where
 
 import Data.Text
 import Data.Time.Clock
@@ -18,7 +18,7 @@ import Prelude
 share
   [mkPersist sqlSettings, mkMigrate "migrateAll"]
   [persistLowerCase|
-Transaction
+MonzoTransaction
     description Text
     amount Int
     uuid Text
@@ -32,11 +32,11 @@ data DbM m a where
 
 $(makeSem ''DbM)
 
-findByUuid :: Text -> SqlPersistM (Maybe (Entity Transaction))
-findByUuid uuid = selectFirst [TransactionUuid P.==. uuid] []
+findByUuid :: Text -> SqlPersistM (Maybe (Entity MonzoTransaction))
+findByUuid uuid = selectFirst [MonzoTransactionUuid P.==. uuid] []
 
-relatedTransaction :: Transaction -> SqlPersistM (Maybe (Entity Transaction))
-relatedTransaction tx = case transactionOriginalTransactionId tx of
+relatedTransaction :: MonzoTransaction -> SqlPersistM (Maybe (Entity MonzoTransaction))
+relatedTransaction tx = case monzoTransactionOriginalTransactionId tx of
   Just uuid -> findByUuid uuid
   Nothing -> return Nothing
 
