@@ -126,6 +126,7 @@ toDbTransaction MonzoTransaction {..} =
 outputMonzoOnDb :: (Members '[DB.DbM] r) => InterpreterFor (Output [MonzoTransaction]) r
 outputMonzoOnDb = interpret $ \case
   Output txs -> DB.runQuery (insertMany_ (toDbTransaction <$> txs))
+
 -- TODO: Insert only if don't exist
 -- can constrain unique id
 

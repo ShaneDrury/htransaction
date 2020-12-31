@@ -44,10 +44,10 @@ runWriteTokens fp = interpret $ \case
   Output cfg -> do
     info $ "Writing tokens to " ++ fp
     ecfg <- embed $ eitherDecodeFileStrict @TokensConfig fp
-    bankAccount <- getBankAccount
+    institution <- getInstitution
     case ecfg of
       Left e -> error e
-      Right (TokensConfig tokensCfg) -> embed $ S.writeFile fp (encodePretty @TokensConfig $ TokensConfig $ Map.insert (bankAccount ^. bankInstitution) cfg tokensCfg)
+      Right (TokensConfig tokensCfg) -> embed $ S.writeFile fp (encodePretty @TokensConfig $ TokensConfig $ Map.insert institution cfg tokensCfg)
 
 runWriteConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Output Config) r
 runWriteConfig fp = interpret $ \case
@@ -77,12 +77,12 @@ runApiTokenM :: (Members '[Embed IO, State Tokens, Logger, BankAccountsM, Random
 runApiTokenM = interpret $ \case
   GetRefreshToken -> do
     config <- get @Tokens
-    institution <- _bankInstitution <$> getBankAccount
+    institution <- getInstitution
     warn "Trying to refresh tokens"
     embed $ useRefreshToken (institutionEndpoint institution) (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
   GetAccessToken -> do
     config <- get @Tokens
-    institution <- _bankInstitution <$> getBankAccount
+    institution <- getInstitution
     case institution of
       Fa -> embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
       Monzo -> do

@@ -31,7 +31,7 @@ module Token
   )
 where
 
-import Config (BankInstitution (..), bankInstitution)
+import Config (BankInstitution (..))
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
@@ -193,9 +193,9 @@ runGetTokens fp = interpret $ \case
   Input -> do
     info $ "Loading tokens from " ++ fp
     ecfg <- embed $ eitherDecodeFileStrict @TokensConfig fp
-    bankAccount <- getBankAccount
+    institution <- getInstitution
     case ecfg of
       Left e -> error e
-      Right (TokensConfig cfg) -> case Map.lookup (bankAccount ^. bankInstitution) cfg of
+      Right (TokensConfig cfg) -> case Map.lookup institution cfg of
         Just bankcfg -> return bankcfg
         Nothing -> error "Missing bank account config"
