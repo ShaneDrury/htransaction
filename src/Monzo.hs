@@ -134,5 +134,3 @@ outputMonzoOnDb = interpret $ \case
 -- could store id of matching transaction
 -- maybe a data consistency issue?
 -- also depends on syncing that one first
-
--- TODO : switch to getInstitution

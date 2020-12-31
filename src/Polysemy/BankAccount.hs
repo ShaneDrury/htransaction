@@ -33,6 +33,4 @@ runBankAccountsMOnConfig = interpret $ \case
     return $ fromJust $ find (\ba -> ba ^. Config.bankAccountId == Cli.bankAccountId args) baList
 
 getInstitution :: (Members '[BankAccountsM] r) => Sem r BankInstitution
-getInstitution = do
-  bankAccount <- getBankAccount
-  return $ bankAccount ^. bankInstitution
+getInstitution = (^. bankInstitution) <$> getBankAccount
