@@ -15,6 +15,7 @@ where
 import qualified Control.Exception as E
 import Control.Monad
 import Data.Aeson
+import Data.Foldable (traverse_)
 import Data.Text
 import Data.Time.Clock
 import Database.Esqueleto
@@ -125,12 +126,4 @@ toDbTransaction MonzoTransaction {..} =
 
 outputMonzoOnDb :: (Members '[DB.DbM] r) => InterpreterFor (Output [MonzoTransaction]) r
 outputMonzoOnDb = interpret $ \case
-  Output txs -> DB.runQuery (insertMany_ (toDbTransaction <$> txs))
-
--- TODO: Insert only if don't exist
--- can constrain unique id
-
--- TODO: Instead of storing ids for existing
--- could store id of matching transaction
--- maybe a data consistency issue?
--- also depends on syncing that one first
+  Output txs -> DB.runQuery $ traverse_ insertUnique (toDbTransaction <$> txs)

@@ -4,6 +4,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-missing-deriving-strategies #-}
 
 module Db (MonzoTransaction (..), migrateAll, MonzoTransactionId, relatedTransaction, DbM (..), runQuery, runDbMOnSqlite) where
 
@@ -22,6 +23,7 @@ MonzoTransaction
     description Text
     amount Int
     uuid Text
+    UniqueMonzoTransactionUuid uuid
     dateTime UTCTime
     originalTransactionId Text Maybe
     deriving Eq Show
