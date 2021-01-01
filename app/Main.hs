@@ -91,7 +91,7 @@ runapp args@Args {..} =
     . runTransactionsApiM
     . runTransactionsManager
     . runApp
-    . runWithDb
+    . runWithDb dbFile
 
 runSync :: (Members '[AppM] r) => Sem r ()
 runSync = syncTransactions

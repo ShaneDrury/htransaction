@@ -14,6 +14,7 @@ import Control.Monad
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Text hiding (length)
 import Data.Time
+import qualified Db as DB
 import Fa
 import GHC.Generics (Generic)
 import Logger
@@ -38,7 +39,22 @@ newtype TransactionsEndpoint = TransactionsEndpoint
 monzoToTransaction :: MonzoTransaction -> Transaction
 monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = description, amount = show (fromIntegral amount / 100.0 :: Double)}
 
-runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, MonzoM MonzoTransactionsEndpoint, Error ApiError, Logger] r) => InterpreterFor TransactionsApiM r
+relatedTransaction :: (Members '[DB.DbM] r) => DB.MonzoTransaction -> Sem r (Maybe (DB.MonzoTransaction))
+relatedTransaction tx = case DB.monzoTransactionOriginalTransactionId tx of
+  Just uuid -> DB.findByUuid uuid
+  Nothing -> return Nothing
+
+useExistingTransaction :: MonzoTransaction -> DB.MonzoTransaction -> Transaction
+useExistingTransaction MonzoTransaction {..} dbmonzo = Transaction {dated_on = TransactionDate $ utctDay created, description = unpack $ DB.monzoTransactionDescription dbmonzo, amount = show (fromIntegral amount / 100.0 :: Double)}
+
+createTransaction :: (Members '[DB.DbM] r) => MonzoTransaction -> Sem r Transaction
+createTransaction tx = do
+  result <- relatedTransaction (toDbTransaction tx)
+  case result of
+    Just other -> return $ useExistingTransaction tx other
+    Nothing -> return $ monzoToTransaction tx
+
+runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, MonzoM MonzoTransactionsEndpoint, Error ApiError, Logger, DB.DbM] r) => InterpreterFor TransactionsApiM r
 runTransactionsApiM = interpret $ \case
   GetTransactionsApi bankAccount fromDate -> case bankAccount ^. bankInstitution of
     Fa -> do
@@ -65,7 +81,14 @@ runTransactionsApiM = interpret $ \case
               <> "since" =: fromDate
           )
       case etx of
-        Right endpoint -> return $ monzoToTransaction <$> txs
+        Right endpoint -> traverse createTransaction txs
           where
             txs = transactions endpoint
         Left e -> throw e
+
+-- TODO: Some outgoing transactions are from requests for payment
+-- these will have a name associated with them that we should use instead
+-- they are paying off a debt that isn't accounted for
+-- could either use the related name
+-- or set up a matching debt that is offset, use original payment
+-- (with clarifying comment)

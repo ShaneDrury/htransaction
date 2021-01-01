@@ -11,6 +11,7 @@ import Control.Lens
 import qualified Data.ByteString.Char8 as BS
 import Data.Maybe (fromJust)
 import Data.Time
+import qualified Db as DB
 import Fa
 import Logger
 import qualified Monzo as MZ
@@ -45,6 +46,11 @@ runGetConfigSimple :: Config -> InterpreterFor (State Config) r
 runGetConfigSimple cfg = interpret $ \case
   Get -> return cfg
   Put _ -> return ()
+
+runDbEmpty :: InterpreterFor DB.DbM r
+runDbEmpty = interpret $ \case
+  DB.FindByUuid _ -> return Nothing
+  DB.InsertUnique _ -> return Nothing
 
 runAppEmpty :: Sem '[AppM, BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
 runAppEmpty =
@@ -190,6 +196,7 @@ runAppDeep ::
     '[ AppM,
        TransactionsManager,
        TransactionsApiM,
+       DB.DbM,
        MZ.MonzoM MZ.MonzoTransactionsEndpoint,
        FaM TransactionsEndpoint,
        ValidTokenM,
@@ -234,6 +241,7 @@ runAppDeep tx config tokens =
     . runFaMTest
     . runMonzoTest
     . retryOnUnauthorized @TransactionsEndpoint
+    . runDbEmpty
     . runTransactionsApiM
     . runTransactionsManager
     . runApp

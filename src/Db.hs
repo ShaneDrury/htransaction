@@ -6,11 +6,11 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-missing-deriving-strategies #-}
 
-module Db (MonzoTransaction (..), migrateAll, MonzoTransactionId, relatedTransaction, DbM (..), runQuery, runDbMOnSqlite) where
+module Db (MonzoTransaction (..), migrateAll, MonzoTransactionId, DbM (..), runDbMOnSqlite, findByUuid, insertUnique, runMigrations) where
 
 import Data.Text
 import Data.Time.Clock
-import Database.Esqueleto hiding (get)
+import Database.Esqueleto hiding (get, insertUnique)
 import qualified Database.Persist.Sqlite as P
 import Database.Persist.TH
 import Polysemy
@@ -30,21 +30,22 @@ MonzoTransaction
 |]
 
 data DbM m a where
-  RunQuery :: SqlPersistM a -> DbM m a
+  FindByUuid :: Text -> DbM m (Maybe MonzoTransaction)
+  InsertUnique :: MonzoTransaction -> DbM m (Maybe (Key MonzoTransaction))
 
 $(makeSem ''DbM)
 
-findByUuid :: Text -> SqlPersistM (Maybe (Entity MonzoTransaction))
-findByUuid uuid = selectFirst [MonzoTransactionUuid P.==. uuid] []
-
-relatedTransaction :: MonzoTransaction -> SqlPersistM (Maybe (Entity MonzoTransaction))
-relatedTransaction tx = case monzoTransactionOriginalTransactionId tx of
-  Just uuid -> findByUuid uuid
-  Nothing -> return Nothing
-
--- TODO: wrap input/output transactions
--- and persist/modify, no need to add another sem yet
+findByUuid_ :: Text -> SqlPersistM (Maybe (Entity MonzoTransaction))
+findByUuid_ uuid = selectFirst [MonzoTransactionUuid P.==. uuid] []
 
 runDbMOnSqlite :: (Members '[Embed IO] r) => FilePath -> InterpreterFor DbM r
 runDbMOnSqlite fp = interpret $ \case
-  RunQuery qry -> embed $ P.runSqlite (pack fp) qry
+  FindByUuid uuid -> embed $ do
+    r <- P.runSqlite sfp (findByUuid_ uuid)
+    return $ entityVal <$> r
+  InsertUnique tx -> embed $ P.runSqlite sfp (P.insertUnique tx)
+  where
+    sfp = pack fp
+
+runMigrations :: (Members '[Embed IO] r) => FilePath -> Sem r ()
+runMigrations fp = embed $ P.runSqlite (pack fp) (runMigration migrateAll)

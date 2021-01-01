@@ -9,6 +9,7 @@ module Monzo
     outputMonzoTransactions,
     outputMonzoOnDb,
     MonzoMetadata (..),
+    toDbTransaction,
   )
 where
 
@@ -18,7 +19,6 @@ import Data.Aeson
 import Data.Foldable (traverse_)
 import Data.Text
 import Data.Time.Clock
-import Database.Esqueleto
 import qualified Db as DB
 import GHC.Generics (Generic)
 import Network.HTTP.Req
@@ -126,4 +126,4 @@ toDbTransaction MonzoTransaction {..} =
 
 outputMonzoOnDb :: (Members '[DB.DbM] r) => InterpreterFor (Output [MonzoTransaction]) r
 outputMonzoOnDb = interpret $ \case
-  Output txs -> DB.runQuery $ traverse_ insertUnique (toDbTransaction <$> txs)
+  Output txs -> traverse_ DB.insertUnique (toDbTransaction <$> txs)
