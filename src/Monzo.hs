@@ -9,6 +9,7 @@ module Monzo
     outputMonzoTransactions,
     outputMonzoOnDb,
     MonzoMetadata (..),
+    MonzoMerchant (..),
     toDbTransaction,
   )
 where
@@ -41,12 +42,19 @@ data MonzoMetadata = MonzoMetadata
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON)
 
+data MonzoMerchant = MonzoMerchant
+  { name :: String
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON)
+
 data MonzoTransaction = MonzoTransaction
   { amount :: Int,
     description :: String,
     created :: UTCTime,
     id :: String,
-    metadata :: MonzoMetadata
+    metadata :: MonzoMetadata,
+    merchant :: MonzoMerchant
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON)
@@ -96,12 +104,7 @@ runMonzoM = interpret $ \case
           then return $ Left Unauthorized
           else throw @HttpException err'
 
--- idea - intercept this and log out more info - helps in reconciling
--- or possibly inspect info and deduce it's splitting a bill
--- in which case use the original merchant as the description?
--- could also spit out an extra comment
-
--- possibly have to exclude pending items
+-- TODO: possibly have to exclude pending items
 -- include a "to" date in api request
 -- can always have a bigger import window and let it dedupe
 
@@ -118,6 +121,7 @@ toDbTransaction :: MonzoTransaction -> DB.MonzoTransaction
 toDbTransaction MonzoTransaction {..} =
   DB.MonzoTransaction
     { monzoTransactionDescription = pack description,
+      monzoTransactionMerchantName = pack $ name merchant,
       monzoTransactionAmount = amount,
       monzoTransactionUuid = pack id,
       monzoTransactionDateTime = created,

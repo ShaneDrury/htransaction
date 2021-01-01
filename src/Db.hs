@@ -26,6 +26,7 @@ MonzoTransaction
     UniqueMonzoTransactionUuid uuid
     dateTime UTCTime
     originalTransactionId Text Maybe
+    merchantName Text
     deriving Eq Show
 |]
 

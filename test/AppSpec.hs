@@ -132,7 +132,8 @@ tx2monzo Transaction {..} =
       description = "Foo",
       amount = 12300,
       id = "asdf",
-      metadata = MZ.MonzoMetadata {original_transaction_id = Nothing}
+      metadata = MZ.MonzoMetadata {original_transaction_id = Nothing},
+      merchant = MZ.MonzoMerchant {MZ.name = "merchant_name"}
     }
 
 monzoTransactionsEndpoint :: [Transaction] -> MZ.MonzoTransactionsEndpoint

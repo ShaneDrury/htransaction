@@ -37,15 +37,15 @@ newtype TransactionsEndpoint = TransactionsEndpoint
   deriving anyclass (FromJSON, ToJSON)
 
 monzoToTransaction :: MonzoTransaction -> Transaction
-monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = description, amount = show (fromIntegral amount / 100.0 :: Double)}
+monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = name merchant, amount = show (fromIntegral amount / 100.0 :: Double)}
 
-relatedTransaction :: (Members '[DB.DbM] r) => DB.MonzoTransaction -> Sem r (Maybe (DB.MonzoTransaction))
+relatedTransaction :: (Members '[DB.DbM] r) => DB.MonzoTransaction -> Sem r (Maybe DB.MonzoTransaction)
 relatedTransaction tx = case DB.monzoTransactionOriginalTransactionId tx of
   Just uuid -> DB.findByUuid uuid
   Nothing -> return Nothing
 
 useExistingTransaction :: MonzoTransaction -> DB.MonzoTransaction -> Transaction
-useExistingTransaction MonzoTransaction {..} dbmonzo = Transaction {dated_on = TransactionDate $ utctDay created, description = unpack $ DB.monzoTransactionDescription dbmonzo, amount = show (fromIntegral amount / 100.0 :: Double)}
+useExistingTransaction MonzoTransaction {..} dbmonzo = Transaction {dated_on = TransactionDate $ utctDay created, description = unpack $ DB.monzoTransactionMerchantName dbmonzo, amount = show (fromIntegral amount / 100.0 :: Double)}
 
 createTransaction :: (Members '[DB.DbM] r) => MonzoTransaction -> Sem r Transaction
 createTransaction tx = do
@@ -79,16 +79,10 @@ runTransactionsApiM = interpret $ \case
           "transactions"
           ( "account_id" =: bankAccount ^. bankAccountId
               <> "since" =: fromDate
+              <> "expand[]" =: ("merchant" :: Text)
           )
       case etx of
         Right endpoint -> traverse createTransaction txs
           where
             txs = transactions endpoint
         Left e -> throw e
-
--- TODO: Some outgoing transactions are from requests for payment
--- these will have a name associated with them that we should use instead
--- they are paying off a debt that isn't accounted for
--- could either use the related name
--- or set up a matching debt that is offset, use original payment
--- (with clarifying comment)
