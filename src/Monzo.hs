@@ -11,6 +11,7 @@ module Monzo
     MonzoMetadata (..),
     MonzoMerchant (..),
     toDbTransaction,
+    excludeDeclinedTransactions,
   )
 where
 
@@ -18,7 +19,8 @@ import qualified Control.Exception as E
 import Control.Monad
 import Data.Aeson
 import Data.Foldable (traverse_)
-import Data.Text
+import Data.Maybe (fromMaybe)
+import Data.Text hiding (filter)
 import Data.Time.Clock
 import qualified Db as DB
 import GHC.Generics (Generic)
@@ -55,7 +57,8 @@ data MonzoTransaction = MonzoTransaction
     id :: Text,
     metadata :: MonzoMetadata,
     merchant :: Maybe MonzoMerchant,
-    notes :: Text
+    notes :: Text,
+    declined_reason :: Maybe Text
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON)
@@ -105,10 +108,6 @@ runMonzoM = interpret $ \case
           then return $ Left Unauthorized
           else throw @HttpException err'
 
--- TODO: possibly have to exclude pending items
--- include a "to" date in api request
--- can always have a bigger import window and let it dedupe
-
 outputMonzoTransactions :: (Members '[MonzoM MonzoTransactionsEndpoint, Output [MonzoTransaction]] r) => Sem r a -> Sem r a
 outputMonzoTransactions = intercept $ \case
   GetMonzo endpoint options -> do
@@ -134,15 +133,8 @@ outputMonzoOnDb :: (Members '[DB.DbM] r) => InterpreterFor (Output [MonzoTransac
 outputMonzoOnDb = interpret $ \case
   Output txs -> traverse_ DB.insertUnique (toDbTransaction <$> txs)
 
--- TODO:
--- now we have to deal with payment requests
--- initiated by not splitting a bill but an amount
--- these may have a note that we should use
--- they don't have a merchant seemingly
--- sometimes they have a blank note
--- so finally fall back to description
+maybeBool2Bool :: Maybe Bool -> Bool
+maybeBool2Bool = fromMaybe False
 
---priority
--- merchant name
--- non blank note
--- description
+excludeDeclinedTransactions :: [MonzoTransaction] -> [MonzoTransaction]
+excludeDeclinedTransactions = filter (\tx -> not $ maybeBool2Bool (Data.Text.null <$> declined_reason tx))

@@ -134,7 +134,8 @@ tx2monzo Transaction {..} =
       id = "asdf",
       metadata = MZ.MonzoMetadata {original_transaction_id = Nothing},
       merchant = Just $ MZ.MonzoMerchant {MZ.name = "merchant_name"},
-      notes = ""
+      notes = "",
+      declined_reason = Nothing
     }
 
 monzoTransactionsEndpoint :: [Transaction] -> MZ.MonzoTransactionsEndpoint

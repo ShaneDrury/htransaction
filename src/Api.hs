@@ -112,7 +112,7 @@ runTransactionsApiM = interpret $ \case
               <> "expand[]" =: ("merchant" :: Text)
           )
       case etx of
-        Right endpoint -> traverse createTransaction txs
+        Right endpoint -> traverse createTransaction (excludeDeclinedTransactions txs)
           where
             txs = transactions endpoint
         Left e -> throw e
