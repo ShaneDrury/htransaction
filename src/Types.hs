@@ -52,7 +52,8 @@ instance CSV.ToField TransactionDate where
 data Transaction = Transaction
   { dated_on :: TransactionDate,
     description :: Text,
-    amount :: Text
+    amount :: Text,
+    comment :: Maybe Text
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, CSV.ToRecord, ToJSON)

@@ -5,6 +5,7 @@ module Fa
     getFa,
     runFaM,
     retryOnUnauthorized,
+    FaTransaction (..),
   )
 where
 
@@ -12,6 +13,7 @@ import qualified Control.Exception as E
 import Control.Monad
 import Data.Aeson
 import Data.Text
+import GHC.Generics
 import Logger
 import Network.HTTP.Req
 import Polysemy
@@ -20,6 +22,14 @@ import Request
 import Token
 import Types
 import Prelude hiding (log)
+
+data FaTransaction = FaTransaction
+  { dated_on :: TransactionDate,
+    description :: Text,
+    amount :: Text
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
 
 data FaM v m a where
   GetFa :: Text -> Option 'Https -> FaM v m (Either ApiError v)

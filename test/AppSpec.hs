@@ -122,7 +122,7 @@ accessTokenEndpoint =
 transactionsEndpoint :: [Transaction] -> TransactionsEndpoint
 transactionsEndpoint tx =
   TransactionsEndpoint
-    { bank_transactions = tx
+    { bank_transactions = tx2fa <$> tx
     }
 
 tx2monzo :: Transaction -> MZ.MonzoTransaction
@@ -143,17 +143,27 @@ monzoTransactionsEndpoint tx =
     { transactions = tx2monzo <$> tx
     }
 
+tx2fa :: Transaction -> FaTransaction
+tx2fa Transaction {..} =
+  FaTransaction
+    { dated_on = dated_on,
+      description = description,
+      amount = amount
+    }
+
 testTransactions :: [Transaction]
 testTransactions =
   [ Transaction
       { dated_on = TransactionDate $ fromGregorian 2020 4 20,
         description = "Foo",
-        amount = "123.0"
+        amount = "123.0",
+        comment = Nothing
       },
     Transaction
       { dated_on = TransactionDate $ fromGregorian 2020 4 21,
         description = "Bar",
-        amount = "456.0"
+        amount = "456.0",
+        comment = Nothing
       }
   ]
 
@@ -308,7 +318,8 @@ spec = do
               ( Transaction
                   { dated_on = TransactionDate $ fromGregorian 2020 4 20,
                     description = "Foo",
-                    amount = "123.0"
+                    amount = "123.0",
+                    comment = Nothing
                   }
               )
       it "imports 100 transaction and produces a warning" $

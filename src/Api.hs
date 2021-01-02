@@ -5,6 +5,7 @@ module Api
     getTransactionsApi,
     runTransactionsApiM,
     TransactionsEndpoint (..),
+    faToTransaction,
   )
 where
 
@@ -31,15 +32,30 @@ data TransactionsApiM m a where
 $(makeSem ''TransactionsApiM)
 
 newtype TransactionsEndpoint = TransactionsEndpoint
-  { bank_transactions :: [Transaction]
+  { bank_transactions :: [FaTransaction]
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
 
 monzoToTransaction :: MonzoTransaction -> Transaction
-monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = descrip, amount = pack $ show (fromIntegral amount / 100.0 :: Double)}
+monzoToTransaction MonzoTransaction {..} =
+  Transaction
+    { dated_on = TransactionDate $ utctDay created,
+      description = descrip,
+      amount = pack $ show (fromIntegral amount / 100.0 :: Double),
+      comment = Just description
+    }
   where
     descrip = maybe (if null notes then description else notes) name merchant
+
+faToTransaction :: FaTransaction -> Transaction
+faToTransaction FaTransaction {..} =
+  Transaction
+    { dated_on = dated_on,
+      description = description,
+      amount = amount,
+      comment = Nothing
+    }
 
 relatedTransaction :: (Members '[DB.DbM] r) => DB.MonzoTransaction -> Sem r (Maybe DB.MonzoTransaction)
 relatedTransaction tx = case DB.monzoTransactionOriginalTransactionId tx of
@@ -47,7 +63,13 @@ relatedTransaction tx = case DB.monzoTransactionOriginalTransactionId tx of
   Nothing -> return Nothing
 
 useExistingTransaction :: MonzoTransaction -> DB.MonzoTransaction -> Transaction
-useExistingTransaction MonzoTransaction {..} dbmonzo = Transaction {dated_on = TransactionDate $ utctDay created, description = descrip, amount = pack $ show (fromIntegral amount / 100.0 :: Double)}
+useExistingTransaction MonzoTransaction {..} dbmonzo =
+  Transaction
+    { dated_on = TransactionDate $ utctDay created,
+      description = descrip,
+      amount = pack $ show (fromIntegral amount / 100.0 :: Double),
+      comment = Just description
+    }
   where
     descrip = case DB.monzoTransactionMerchantName dbmonzo of
       Just merchname -> merchname
@@ -77,7 +99,7 @@ runTransactionsApiM = interpret $ \case
       case etx of
         Right endpoint -> do
           when (length tx == 100) (warn "WARNING: Number of transactions close to limit")
-          return tx
+          return $ faToTransaction <$> tx
           where
             tx = bank_transactions endpoint
         Left e -> throw e
