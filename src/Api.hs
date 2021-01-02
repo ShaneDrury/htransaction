@@ -23,7 +23,7 @@ import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
 import Types
-import Prelude hiding (id)
+import Prelude hiding (id, null)
 
 data TransactionsApiM m a where
   GetTransactionsApi :: BankAccount -> Day -> TransactionsApiM m [Transaction]
@@ -37,7 +37,9 @@ newtype TransactionsEndpoint = TransactionsEndpoint
   deriving anyclass (FromJSON, ToJSON)
 
 monzoToTransaction :: MonzoTransaction -> Transaction
-monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = name merchant, amount = show (fromIntegral amount / 100.0 :: Double)}
+monzoToTransaction MonzoTransaction {..} = Transaction {dated_on = TransactionDate $ utctDay created, description = descrip, amount = pack $ show (fromIntegral amount / 100.0 :: Double)}
+  where
+    descrip = maybe (if null notes then description else notes) name merchant
 
 relatedTransaction :: (Members '[DB.DbM] r) => DB.MonzoTransaction -> Sem r (Maybe DB.MonzoTransaction)
 relatedTransaction tx = case DB.monzoTransactionOriginalTransactionId tx of
@@ -45,7 +47,13 @@ relatedTransaction tx = case DB.monzoTransactionOriginalTransactionId tx of
   Nothing -> return Nothing
 
 useExistingTransaction :: MonzoTransaction -> DB.MonzoTransaction -> Transaction
-useExistingTransaction MonzoTransaction {..} dbmonzo = Transaction {dated_on = TransactionDate $ utctDay created, description = unpack $ DB.monzoTransactionMerchantName dbmonzo, amount = show (fromIntegral amount / 100.0 :: Double)}
+useExistingTransaction MonzoTransaction {..} dbmonzo = Transaction {dated_on = TransactionDate $ utctDay created, description = descrip, amount = pack $ show (fromIntegral amount / 100.0 :: Double)}
+  where
+    descrip = case DB.monzoTransactionMerchantName dbmonzo of
+      Just merchname -> merchname
+      Nothing -> if null txNote then DB.monzoTransactionDescription dbmonzo else txNote
+        where
+          txNote = DB.monzoTransactionNote dbmonzo
 
 createTransaction :: (Members '[DB.DbM] r) => MonzoTransaction -> Sem r Transaction
 createTransaction tx = do

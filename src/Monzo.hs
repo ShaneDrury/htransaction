@@ -37,24 +37,25 @@ data MonzoM v m a where
 $(makeSem ''MonzoM)
 
 data MonzoMetadata = MonzoMetadata
-  { original_transaction_id :: Maybe String
+  { original_transaction_id :: Maybe Text
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON)
 
 data MonzoMerchant = MonzoMerchant
-  { name :: String
+  { name :: Text
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON)
 
 data MonzoTransaction = MonzoTransaction
   { amount :: Int,
-    description :: String,
+    description :: Text,
     created :: UTCTime,
-    id :: String,
+    id :: Text,
     metadata :: MonzoMetadata,
-    merchant :: MonzoMerchant
+    merchant :: Maybe MonzoMerchant,
+    notes :: Text
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON)
@@ -120,14 +121,28 @@ outputMonzoTransactions = intercept $ \case
 toDbTransaction :: MonzoTransaction -> DB.MonzoTransaction
 toDbTransaction MonzoTransaction {..} =
   DB.MonzoTransaction
-    { monzoTransactionDescription = pack description,
-      monzoTransactionMerchantName = pack $ name merchant,
+    { monzoTransactionDescription = description,
+      monzoTransactionMerchantName = name <$> merchant,
       monzoTransactionAmount = amount,
-      monzoTransactionUuid = pack id,
+      monzoTransactionUuid = id,
       monzoTransactionDateTime = created,
-      monzoTransactionOriginalTransactionId = pack <$> original_transaction_id metadata
+      monzoTransactionOriginalTransactionId = original_transaction_id metadata,
+      monzoTransactionNote = notes
     }
 
 outputMonzoOnDb :: (Members '[DB.DbM] r) => InterpreterFor (Output [MonzoTransaction]) r
 outputMonzoOnDb = interpret $ \case
   Output txs -> traverse_ DB.insertUnique (toDbTransaction <$> txs)
+
+-- TODO:
+-- now we have to deal with payment requests
+-- initiated by not splitting a bill but an amount
+-- these may have a note that we should use
+-- they don't have a merchant seemingly
+-- sometimes they have a blank note
+-- so finally fall back to description
+
+--priority
+-- merchant name
+-- non blank note
+-- description

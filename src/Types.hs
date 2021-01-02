@@ -13,6 +13,7 @@ where
 import Data.Aeson
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Csv as CSV
+import Data.Text
 import Data.Time
 import GHC.Generics
 import qualified Network.HTTP.Req as H
@@ -50,8 +51,8 @@ instance CSV.ToField TransactionDate where
 
 data Transaction = Transaction
   { dated_on :: TransactionDate,
-    description :: String,
-    amount :: String
+    description :: Text,
+    amount :: Text
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, CSV.ToRecord, ToJSON)
