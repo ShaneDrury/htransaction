@@ -3,31 +3,31 @@
 module Token
   ( runGetTime,
     TokenEndpoint (..),
-    ValidTokenM (..),
-    getValidToken,
-    TokenM (..),
-    invalidateTokens,
-    ApiTokenM (..),
-    getToken,
+    OAuthM (..),
     getAccessToken,
     getAccessTokenNetwork,
-    getRefreshToken,
     useRefreshToken,
-    toValidToken,
-    withNewTokens,
     runApiTokenMConst,
     clientID,
     clientSecret,
-    token,
+    accessToken,
     tokenExpiresAt,
     refreshToken,
-    configToken,
-    Tokens (..),
+    TokenSet (..),
     authorizationUrl,
     runGetTokens,
-    runGetToken,
-    TokensConfig (..),
+    runAccessTokenM,
+    BankInstitutionTokens (..),
     monzoAuthUrl,
+    exchangeAuthCode,
+    exchangeRefreshToken,
+    updateTokens,
+    AccessTokenM (..),
+    AccessToken (..),
+    refreshAccessToken,
+    getAuthCode,
+    AuthorizationCode (..),
+    RefreshToken (..),
   )
 where
 
@@ -35,7 +35,6 @@ import Config (BankInstitution (..))
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text
@@ -50,91 +49,87 @@ import Polysemy.State
 import Types
 import Prelude
 
-data Tokens = Tokens
-  { _token :: Maybe String,
-    _refreshToken :: Maybe String,
+newtype AccessToken = AccessToken Text
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
+
+newtype RefreshToken = RefreshToken Text
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
+
+newtype AuthorizationCode = AuthorizationCode String deriving stock (Eq, Show)
+
+data TokenSet = TokenSet
+  { _accessToken :: Maybe AccessToken,
+    _refreshToken :: Maybe RefreshToken,
     _clientID :: String,
     _clientSecret :: String,
     _tokenExpiresAt :: Maybe UTCTime
   }
   deriving stock (Eq, Show, Generic)
 
-newtype TokensConfig
-  = TokensConfig (Map.Map BankInstitution Tokens)
+newtype BankInstitutionTokens
+  = BankInstitutionTokens (Map.Map BankInstitution TokenSet)
   deriving stock (Eq, Show, Generic)
 
-$(makeLenses ''Tokens)
+$(makeLenses ''TokenSet)
 
-$(makeLenses ''TokensConfig)
+$(makeLenses ''BankInstitutionTokens)
 
-$(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''Tokens)
+$(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''TokenSet)
 
-$(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''TokensConfig)
+$(deriveJSON defaultOptions {fieldLabelModifier = Prelude.drop 1} ''BankInstitutionTokens)
 
-configToken :: Tokens -> UTCTime -> Either InvalidTokenReason ValidToken
-configToken config currentTime =
-  case config ^. token of
+getAccessToken' :: TokenSet -> UTCTime -> Either InvalidTokenReason AccessToken
+getAccessToken' tokenSet currentTime =
+  case tokenSet ^. accessToken of
     Just t ->
-      case config ^. tokenExpiresAt of
+      case tokenSet ^. tokenExpiresAt of
         Just expires ->
           if expires <= currentTime
             then Left Expired
-            else Right $ ValidToken $ BS.pack t
+            else Right t
         Nothing -> Left Missing
     Nothing -> Left Missing
 
-data ValidTokenM m a where
-  GetValidToken :: ValidTokenM m ValidToken
-  InvalidateTokens :: ValidTokenM m ()
+data AccessTokenM m a where
+  GetAccessToken :: AccessTokenM m AccessToken
+  RefreshAccessToken :: AccessTokenM m AccessToken
 
-$(makeSem ''ValidTokenM)
-
-data TokenM m a where
-  GetToken :: TokenM m (Either InvalidTokenReason ValidToken)
-
-$(makeSem ''TokenM)
-
-runGetToken :: Members '[Input UTCTime, State Tokens] r => InterpreterFor TokenM r
-runGetToken = interpret $ \case
-  GetToken -> configToken <$> get @Tokens <*> input @UTCTime
+$(makeSem ''AccessTokenM)
 
 data TokenEndpoint = TokenEndpoint
-  { access_token :: String,
+  { access_token :: AccessToken,
     token_type :: String,
     expires_in :: Integer,
-    refresh_token :: Maybe String
+    refresh_token :: RefreshToken,
+    refresh_token_expires_in :: Integer
   }
   deriving stock (Eq, Show)
   deriving anyclass (FromJSON)
   deriving stock (Generic)
 
-data ApiTokenM m a where
-  GetRefreshToken :: ApiTokenM m TokenEndpoint
-  GetAccessToken :: ApiTokenM m TokenEndpoint
+data OAuthM m a where
+  GetAuthCode :: OAuthM m AuthorizationCode
+  ExchangeAuthCode :: AuthorizationCode -> OAuthM m TokenEndpoint
+  ExchangeRefreshToken :: RefreshToken -> OAuthM m TokenEndpoint
 
-$(makeSem ''ApiTokenM)
+$(makeSem ''OAuthM)
 
-withNewTokens :: TokenEndpoint -> Tokens -> UTCTime -> Tokens
-withNewTokens TokenEndpoint {..} original currentTime =
+updateTokens :: TokenEndpoint -> TokenSet -> UTCTime -> TokenSet
+updateTokens TokenEndpoint {..} original currentTime =
   let expiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
-   in case refresh_token of
-        Just _ ->
-          original
-            { _token = Just access_token,
-              _refreshToken = refresh_token,
-              _tokenExpiresAt = expiresAt
-            }
-        Nothing ->
-          original
-            { _token = Just access_token,
-              _tokenExpiresAt = expiresAt
-            }
+   in original
+        { _accessToken = Just access_token,
+          _refreshToken = Just refresh_token,
+          _tokenExpiresAt = expiresAt
+        }
 
 userAgentHeader :: Option scheme
 userAgentHeader = header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
 
-getAccessTokenNetwork :: Url 'Https -> String -> String -> String -> IO TokenEndpoint
-getAccessTokenNetwork endpoint cID secret authorizationCode = runReq defaultHttpConfig $ do
+getAccessTokenNetwork :: Url 'Https -> String -> String -> AuthorizationCode -> IO TokenEndpoint
+getAccessTokenNetwork endpoint cID secret (AuthorizationCode authorizationCode) = runReq defaultHttpConfig $ do
   r <-
     req
       POST
@@ -152,8 +147,8 @@ getAccessTokenNetwork endpoint cID secret authorizationCode = runReq defaultHttp
   let body = responseBody r :: TokenEndpoint
   return body
 
-useRefreshToken :: Url 'Https -> String -> String -> String -> IO TokenEndpoint
-useRefreshToken endpoint cID secret refresh = runReq defaultHttpConfig $ do
+useRefreshToken :: Url 'Https -> String -> String -> RefreshToken -> IO TokenEndpoint
+useRefreshToken endpoint cID secret (RefreshToken refresh) = runReq defaultHttpConfig $ do
   r <-
     req
       POST
@@ -176,26 +171,54 @@ monzoAuthUrl :: String -> String -> String
 monzoAuthUrl clientId state =
   "https://auth.monzo.com/?client_id=" <> clientId <> "&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground&response_type=code&state=" <> state
 
-toValidToken :: TokenEndpoint -> ValidToken
-toValidToken endpoint = ValidToken $ BS.pack $ access_token endpoint
-
 runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
-runApiTokenMConst :: TokenEndpoint -> TokenEndpoint -> InterpreterFor ApiTokenM r
-runApiTokenMConst refresh access = interpret $ \case
-  GetRefreshToken -> return refresh
-  GetAccessToken -> return access
+runApiTokenMConst :: TokenEndpoint -> TokenEndpoint -> AuthorizationCode -> InterpreterFor OAuthM r
+runApiTokenMConst refresh access authcode = interpret $ \case
+  ExchangeRefreshToken _ -> return refresh
+  ExchangeAuthCode _ -> return access
+  GetAuthCode -> return authcode
 
-runGetTokens :: (Members '[Logger, BankAccountsM, Embed IO] r) => FilePath -> InterpreterFor (Input Tokens) r
+runGetTokens :: (Members '[Logger, BankAccountsM, Embed IO] r) => FilePath -> InterpreterFor (Input TokenSet) r
 runGetTokens fp = interpret $ \case
   Input -> do
     info $ "Loading tokens from " ++ fp
-    ecfg <- embed $ eitherDecodeFileStrict @TokensConfig fp
+    ecfg <- embed $ eitherDecodeFileStrict @BankInstitutionTokens fp
     institution <- getInstitution
     case ecfg of
       Left e -> error e
-      Right (TokensConfig cfg) -> case Map.lookup institution cfg of
+      Right (BankInstitutionTokens cfg) -> case Map.lookup institution cfg of
         Just bankcfg -> return bankcfg
         Nothing -> error "Missing bank account config"
+
+runAccessTokenM :: Members '[Input UTCTime, State TokenSet, OAuthM] r => InterpreterFor AccessTokenM r
+runAccessTokenM = interpret $ \case
+  GetAccessToken -> do
+    tokenSet <- get @TokenSet
+    currentTime <- input @UTCTime
+    case getAccessToken' tokenSet currentTime of
+      Left Expired -> refreshAccessToken_
+      Left Missing -> do
+        authCode <- getAuthCode
+        endpoint <- exchangeAuthCode authCode
+        return $ access_token endpoint
+      Right tkn -> return tkn
+  RefreshAccessToken -> refreshAccessToken_
+
+refreshAccessToken_ :: Members '[State TokenSet, OAuthM] r => Sem r AccessToken
+refreshAccessToken_ = do
+  rtkn <- getRefreshToken_
+  endpoint <- exchangeRefreshToken rtkn
+  return $ access_token endpoint
+
+getRefreshToken_ :: Members '[State TokenSet, OAuthM] r => Sem r RefreshToken
+getRefreshToken_ = do
+  tokenSet <- get @TokenSet
+  case tokenSet ^. refreshToken of
+    Nothing -> do
+      authCode <- getAuthCode
+      endpoint <- exchangeAuthCode authCode
+      return $ refresh_token endpoint
+    Just tkn -> return tkn

@@ -20,6 +20,7 @@ import Polysemy.BankAccount
 import Polysemy.Cached
 import Polysemy.Config
 import Polysemy.Error
+import Polysemy.Http
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
@@ -42,13 +43,16 @@ runapp ::
        DB.DbM,
        MonzoM MonzoTransactionsEndpoint,
        FaM TransactionsEndpoint,
-       ValidTokenM,
-       TokenM,
+       ApiHttpM TransactionsEndpoint,
+       ApiHttpM MonzoTransactionsEndpoint,
+       HttpM TransactionsEndpoint,
+       HttpM MonzoTransactionsEndpoint,
+       AccessTokenM,
+       OAuthM,
        Input UTCTime,
-       ApiTokenM,
        RandomM,
        PersistLastImportedM,
-       State Tokens,
+       State TokenSet,
        BankAccountsM,
        Input Args,
        State Config,
@@ -71,16 +75,19 @@ runapp args@Args {..} =
     . runStateCached @Config
     . runInputConst args
     . runBankAccountsMOnConfig
-    . runGetTokens tokensFile
+    . runGetTokens tokensFile -- Input TokenSet
     . runWriteTokens tokensFile
-    . runStateCached @Tokens
+    . runStateCached @TokenSet
     . runPersistLastImportedM
     . runRandomROnIO
-    . runApiTokenM
     . runGetTime
+    . runOAuthM
     . saveTokens
-    . runGetToken
-    . runValidToken
+    . runAccessTokenM
+    . runHttpMOnReq @MonzoTransactionsEndpoint
+    . runHttpMOnReq @TransactionsEndpoint
+    . runApiHttpMOnTokens @MonzoTransactionsEndpoint
+    . runApiHttpMOnTokens @TransactionsEndpoint
     . runFaM @TransactionsEndpoint
     . runMonzoM @MonzoTransactionsEndpoint
     . DB.runDbMOnSqlite dbFile

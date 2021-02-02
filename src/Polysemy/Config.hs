@@ -1,11 +1,9 @@
 module Polysemy.Config
-  ( runApiTokenM,
-    runGetToken,
-    runValidToken,
-    saveTokens,
-    runGetConfig,
+  ( runGetConfig,
     runWriteConfig,
     runWriteTokens,
+    saveTokens,
+    runOAuthM,
   )
 where
 
@@ -16,7 +14,6 @@ import Data.Aeson
 import Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString.Lazy.Char8 as S
 import qualified Data.Map as Map
-import Data.Maybe
 import Data.Time
 import Logger
 import Network.HTTP.Req
@@ -27,7 +24,6 @@ import Polysemy.Output
 import Polysemy.Random
 import Polysemy.State
 import Token
-import Types
 import Prelude
 
 runGetConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Input Config) r
@@ -39,15 +35,15 @@ runGetConfig fp = interpret $ \case
       Left e -> error e
       Right cfg -> return cfg
 
-runWriteTokens :: (Members '[Logger, Embed IO, BankAccountsM] r) => FilePath -> InterpreterFor (Output Tokens) r
+runWriteTokens :: (Members '[Logger, Embed IO, BankAccountsM] r) => FilePath -> InterpreterFor (Output TokenSet) r
 runWriteTokens fp = interpret $ \case
   Output cfg -> do
     info $ "Writing tokens to " ++ fp
-    ecfg <- embed $ eitherDecodeFileStrict @TokensConfig fp
+    ecfg <- embed $ eitherDecodeFileStrict @BankInstitutionTokens fp
     institution <- getInstitution
     case ecfg of
       Left e -> error e
-      Right (TokensConfig tokensCfg) -> embed $ S.writeFile fp (encodePretty @TokensConfig $ TokensConfig $ Map.insert institution cfg tokensCfg)
+      Right (BankInstitutionTokens tokensCfg) -> embed $ S.writeFile fp (encodePretty @BankInstitutionTokens $ BankInstitutionTokens $ Map.insert institution cfg tokensCfg)
 
 runWriteConfig :: (Members '[Logger, Embed IO] r) => FilePath -> InterpreterFor (Output Config) r
 runWriteConfig fp = interpret $ \case
@@ -55,50 +51,47 @@ runWriteConfig fp = interpret $ \case
     info $ "Writing config to " ++ fp
     embed $ S.writeFile fp (encodePretty cfg)
 
-runValidToken :: (Members '[ApiTokenM, TokenM, State Tokens, Input UTCTime] r) => InterpreterFor ValidTokenM r
-runValidToken = interpret $ \case
-  GetValidToken -> do
-    eValidToken <- getToken
-    case eValidToken of
-      Left Missing -> toValidToken <$> getAccessToken
-      Left Expired -> toValidToken <$> getRefreshToken
-      Right v -> return v
-  InvalidateTokens -> do
-    oldTokens <- get @Tokens
-    currentTime <- input
-    put (oldTokens & tokenExpiresAt ?~ currentTime)
-
 institutionEndpoint :: BankInstitution -> Url 'Https
 institutionEndpoint institution = case institution of
   Fa -> https "api.freeagent.com" /: "v2" /: "token_endpoint"
   Monzo -> https "api.monzo.com" /: "oauth2" /: "token"
 
-runApiTokenM :: (Members '[Embed IO, State Tokens, Logger, BankAccountsM, RandomM] r) => InterpreterFor ApiTokenM r
-runApiTokenM = interpret $ \case
-  GetRefreshToken -> do
-    config <- get @Tokens
-    institution <- getInstitution
-    warn "Trying to refresh tokens"
-    embed $ useRefreshToken (institutionEndpoint institution) (config ^. clientID) (config ^. clientSecret) (fromJust (config ^. refreshToken))
-  GetAccessToken -> do
-    config <- get @Tokens
+runOAuthM :: (Members '[Embed IO, State TokenSet, Logger, BankAccountsM, RandomM] r) => InterpreterFor OAuthM r
+runOAuthM = interpret $ \case
+  GetAuthCode -> do
+    config <- get @TokenSet
     institution <- getInstitution
     case institution of
       Fa -> embed $ putStrLn $ "Open and copy code: " <> authorizationUrl (config ^. clientID)
       Monzo -> do
         state <- randomString 30
         embed $ putStrLn $ "Open and copy code: " <> monzoAuthUrl (config ^. clientID) state
-    authorizationCode <- embed getLine
-    embed $ getAccessTokenNetwork (institutionEndpoint institution) (config ^. clientID) (config ^. clientSecret) authorizationCode
+    AuthorizationCode <$> embed getLine
+  ExchangeAuthCode authCode -> do
+    config <- get @TokenSet
+    institution <- getInstitution
+    warn "Exchanging auth code"
+    embed $ getAccessTokenNetwork (institutionEndpoint institution) (config ^. clientID) (config ^. clientSecret) authCode
+  ExchangeRefreshToken tkn -> do
+    config <- get @TokenSet
+    institution <- getInstitution
+    warn "Trying to refresh tokens"
+    embed $ useRefreshToken (institutionEndpoint institution) (config ^. clientID) (config ^. clientSecret) tkn
 
-doSaveTokens :: (Members '[Input UTCTime, State Tokens, ApiTokenM] r) => TokenEndpoint -> Sem r TokenEndpoint
-doSaveTokens tokens = do
-  originalConfig <- get @Tokens
+doSaveEndpoint :: (Members '[Input UTCTime, State TokenSet] r) => TokenEndpoint -> Sem r ()
+doSaveEndpoint endpoint = do
+  originalConfig <- get @TokenSet
   currentTime <- input @UTCTime
-  put (withNewTokens tokens originalConfig currentTime)
-  return tokens
+  put (updateTokens endpoint originalConfig currentTime)
 
-saveTokens :: (Members '[Input UTCTime, State Tokens, ApiTokenM] r) => Sem r a -> Sem r a
-saveTokens = intercept @ApiTokenM $ \case
-  GetRefreshToken -> getRefreshToken >>= doSaveTokens
-  GetAccessToken -> getAccessToken >>= doSaveTokens
+saveTokens :: (Members '[Input UTCTime, State TokenSet, OAuthM] r) => Sem r a -> Sem r a
+saveTokens = intercept @OAuthM $ \case
+  GetAuthCode -> getAuthCode
+  ExchangeAuthCode authCode -> do
+    endpoint <- exchangeAuthCode authCode
+    doSaveEndpoint endpoint
+    return endpoint
+  ExchangeRefreshToken tkn -> do
+    endpoint <- exchangeRefreshToken tkn
+    doSaveEndpoint endpoint
+    return endpoint

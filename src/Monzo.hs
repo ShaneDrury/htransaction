@@ -15,7 +15,6 @@ module Monzo
   )
 where
 
-import qualified Control.Exception as E
 import Control.Monad
 import Data.Aeson
 import Data.Foldable (traverse_)
@@ -26,10 +25,8 @@ import qualified Db as DB
 import GHC.Generics (Generic)
 import Network.HTTP.Req
 import Polysemy
-import Polysemy.Error
+import Polysemy.Http
 import Polysemy.Output
-import Request
-import Token
 import Types hiding (amount, description)
 import Prelude hiding (id)
 
@@ -69,44 +66,16 @@ newtype MonzoTransactionsEndpoint = MonzoTransactionsEndpoint
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON)
 
-monzoRequest :: (MonadHttp m, FromJSON a) => Text -> ValidToken -> Option 'Https -> m (JsonResponse a)
-monzoRequest endpoint (ValidToken tkn) options =
-  req
-    GET
-    (https "api.monzo.com" /: endpoint)
-    NoReqBody
-    jsonResponse
-    ( oAuth2Bearer tkn
-        <> header
-          "User-Agent"
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
-        <> options
-    )
-
 runMonzoM ::
   forall v r.
   ( Members
-      '[ Embed IO,
-         Error HttpException,
-         ValidTokenM
+      '[ ApiHttpM v
        ]
-      r,
-    FromJSON v
+      r
   ) =>
   InterpreterFor (MonzoM v) r
 runMonzoM = interpret $ \case
-  GetMonzo endpoint options -> do
-    tkn <- getValidToken
-    result <- embed $
-      E.try $ do
-        r <- runReq defaultHttpConfig $ monzoRequest endpoint tkn options
-        return (responseBody r :: v)
-    case result of
-      Right res -> return $ Right (res :: v)
-      Left err' ->
-        if isUnauthorized err'
-          then return $ Left Unauthorized
-          else throw @HttpException err'
+  GetMonzo endpoint options -> runApiRequest (https "api.monzo.com" /: endpoint) GET options
 
 outputMonzoTransactions :: (Members '[MonzoM MonzoTransactionsEndpoint, Output [MonzoTransaction]] r) => Sem r a -> Sem r a
 outputMonzoTransactions = intercept $ \case

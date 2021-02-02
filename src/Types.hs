@@ -3,7 +3,6 @@ module Types
     handleErrors,
     AppError (..),
     ApiError (..),
-    ValidToken (..),
     InvalidTokenReason (..),
     Transaction (..),
     TransactionDate (..),
@@ -29,8 +28,6 @@ data ApiError = Unauthorized deriving stock (Eq, Show)
 
 data InvalidTokenReason = Expired | Missing deriving stock (Eq, Show)
 
-newtype ValidToken = ValidToken BS.ByteString deriving stock (Eq, Show)
-
 data AppError
   = HttpError H.HttpException
   | AppApiError ApiError
@@ -47,7 +44,7 @@ newtype TransactionDate = TransactionDate Day
   deriving anyclass (FromJSON, ToJSON)
 
 instance CSV.ToField TransactionDate where
-  toField (TransactionDate d) = BS.pack $ showGregorian d
+  toField (TransactionDate d) = BS.pack $ show d
 
 data Transaction = Transaction
   { dated_on :: TransactionDate,

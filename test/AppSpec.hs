@@ -8,7 +8,6 @@ import App (AppM (..), runApp, syncTransactions)
 import Cli
 import Config
 import Control.Lens
-import qualified Data.ByteString.Char8 as BS
 import Data.Maybe (fromJust)
 import Data.Time
 import qualified Db as DB
@@ -21,6 +20,7 @@ import Polysemy.BankAccount
 import Polysemy.Cached
 import Polysemy.Config
 import Polysemy.Error
+import Polysemy.Http
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Output
@@ -91,11 +91,11 @@ testConfig =
     { _bankAccounts = [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Fa}]
     }
 
-testTokens :: Tokens
+testTokens :: TokenSet
 testTokens =
-  Tokens
-    { _token = Just "token",
-      _refreshToken = Just "refreshToken",
+  TokenSet
+    { _accessToken = Just (AccessToken "token"),
+      _refreshToken = Just (RefreshToken "refreshToken"),
       _clientID = "clientID",
       _clientSecret = "secret",
       _tokenExpiresAt = testTokenExpiresAt
@@ -104,20 +104,25 @@ testTokens =
 refreshTokenEndpoint :: TokenEndpoint
 refreshTokenEndpoint =
   TokenEndpoint
-    { access_token = "accessTokenRefresh",
+    { access_token = Token.AccessToken "accessTokenRefresh",
       token_type = "foo",
       expires_in = 86400,
-      refresh_token = Just "refreshTokenRefresh"
+      refresh_token = Token.RefreshToken "refreshTokenRefresh",
+      refresh_token_expires_in = 123
     }
 
 accessTokenEndpoint :: TokenEndpoint
 accessTokenEndpoint =
   TokenEndpoint
-    { access_token = "accessTokenAccess",
+    { access_token = Token.AccessToken "accessTokenAccess",
       token_type = "foo",
       expires_in = 86400,
-      refresh_token = Just "refreshTokenAccess"
+      refresh_token = Token.RefreshToken "refreshTokenAccess",
+      refresh_token_expires_in = 123
     }
+
+authorizationCode :: AuthorizationCode
+authorizationCode = AuthorizationCode "foo"
 
 transactionsEndpoint :: [Transaction] -> TransactionsEndpoint
 transactionsEndpoint tx =
@@ -168,34 +173,19 @@ testTransactions =
       }
   ]
 
-runFaMTest :: Members '[Input (Maybe (Maybe [Transaction])), Error ApiError, ValidTokenM] r => InterpreterFor (FaM TransactionsEndpoint) r
-runFaMTest =
+runHttpMTest :: forall v r. Members '[Input (Maybe (Maybe [Transaction])), Error ApiError, AccessTokenM] r => ([Transaction] -> v) -> InterpreterFor (HttpM v) r
+runHttpMTest convert =
   interpret
     ( \case
-        GetFa _ _ -> do
-          _ <- getValidToken
+        RunRequest {} -> do
+          _ <- getAccessToken
           mmtxs <- input @(Maybe (Maybe [Transaction]))
           case mmtxs of
             Just mtxs ->
               case mtxs of
-                Just txs -> return $ Right $ transactionsEndpoint txs
+                Just txs -> return $ Right $ convert txs
                 Nothing -> return $ Left Unauthorized
-            Nothing -> return $ Right $ transactionsEndpoint []
-    )
-
-runMonzoTest :: Members '[Input (Maybe (Maybe [Transaction])), Error ApiError, ValidTokenM] r => InterpreterFor (MZ.MonzoM MZ.MonzoTransactionsEndpoint) r
-runMonzoTest =
-  interpret
-    ( \case
-        MZ.GetMonzo _ _ -> do
-          _ <- getValidToken
-          mmtxs <- input @(Maybe (Maybe [Transaction]))
-          case mmtxs of
-            Just mtxs ->
-              case mtxs of
-                Just txs -> return $ Right $ monzoTransactionsEndpoint txs
-                Nothing -> return $ Left Unauthorized
-            Nothing -> return $ Right $ monzoTransactionsEndpoint []
+            Nothing -> return $ Right $ convert []
     )
 
 testArgs :: Args
@@ -204,21 +194,24 @@ testArgs = Args {Cli.bankAccountId = "1", outfile = "", configFile = "", tokensF
 runAppDeep ::
   [Maybe [Transaction]] ->
   Config ->
-  Tokens ->
+  TokenSet ->
   Sem
     '[ AppM,
        TransactionsManager,
        TransactionsApiM,
        DB.DbM,
-       MZ.MonzoM MZ.MonzoTransactionsEndpoint,
        FaM TransactionsEndpoint,
-       ValidTokenM,
-       TokenM,
+       MZ.MonzoM MZ.MonzoTransactionsEndpoint,
+       ApiHttpM TransactionsEndpoint,
+       ApiHttpM MZ.MonzoTransactionsEndpoint,
+       HttpM TransactionsEndpoint,
+       HttpM MZ.MonzoTransactionsEndpoint,
+       AccessTokenM,
        Input UTCTime,
-       State Tokens,
+       State TokenSet,
        Output [Transaction],
        Input (Maybe (Maybe [Transaction])),
-       ApiTokenM,
+       OAuthM,
        PersistLastImportedM,
        BankAccountsM,
        Input Args,
@@ -229,7 +222,7 @@ runAppDeep ::
        Error AppError
      ]
     a ->
-  Either AppError ([LogMsg], ([Config], ([[Transaction]], ([Tokens], a))))
+  Either AppError ([LogMsg], ([Config], ([[Transaction]], ([TokenSet], a))))
 runAppDeep tx config tokens =
   run
     . handleErrors
@@ -241,19 +234,22 @@ runAppDeep tx config tokens =
     . runInputConst testArgs
     . runBankAccountsMOnConfig
     . runPersistLastImportedM
-    . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
+    . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint authorizationCode
     . runInputList tx
     . runOutputList @[Transaction]
     . runInputConst tokens
-    . runOutputList @Tokens
-    . runStateCached @Tokens
+    . runOutputList @TokenSet
+    . runStateCached @TokenSet
     . runInputConst testCurrentTime
     . saveTokens
-    . runGetToken
-    . runValidToken
-    . runFaMTest
-    . runMonzoTest
-    . retryOnUnauthorized @TransactionsEndpoint
+    . runAccessTokenM
+    . runHttpMTest @MZ.MonzoTransactionsEndpoint monzoTransactionsEndpoint
+    . runHttpMTest @TransactionsEndpoint transactionsEndpoint
+    . runApiHttpMOnTokens @MZ.MonzoTransactionsEndpoint
+    . runApiHttpMOnTokens @TransactionsEndpoint
+    . retryOnUnauthorized
+    . MZ.runMonzoM @MZ.MonzoTransactionsEndpoint
+    . runFaM @TransactionsEndpoint
     . runDbEmpty
     . runTransactionsApiM
     . runTransactionsManager
@@ -261,43 +257,41 @@ runAppDeep tx config tokens =
 
 spec :: Spec
 spec = do
-  describe "runValidToken" $ do
-    let tokenApp :: (Members '[ValidTokenM] r) => Sem r ValidToken
-        tokenApp = getValidToken
+  describe "AccessTokenM" $ do
+    let tokenApp :: (Members '[AccessTokenM] r) => Sem r AccessToken
+        tokenApp = getAccessToken
     context "happy path" $ do
       let happyRunner ::
             Config ->
-            Tokens ->
+            TokenSet ->
             Sem
-              '[ ValidTokenM,
-                 TokenM,
+              '[ AccessTokenM,
                  Input UTCTime,
-                 State Tokens,
-                 Input Tokens,
+                 State TokenSet,
+                 Input TokenSet,
                  State Config,
                  Input Config,
-                 ApiTokenM
+                 OAuthM
                ]
-              ValidToken ->
-            ValidToken
+              AccessToken ->
+            AccessToken
           happyRunner config tokens =
             run
-              . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint
+              . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint authorizationCode
               . runInputConst config
               . evalState config
               . runInputConst tokens
               . evalState tokens
               . runInputConst testCurrentTime
-              . runGetToken
-              . runValidToken
+              . runAccessTokenM
       it "uses the config token if not expired" $
-        happyRunner testConfig testTokens tokenApp `shouldBe` ValidToken (BS.pack "token")
+        happyRunner testConfig testTokens tokenApp `shouldBe` AccessToken ("token")
       it "uses the refresh token if expired" $
-        happyRunner testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenRefresh")
+        happyRunner testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) tokenApp `shouldBe` AccessToken ("accessTokenRefresh")
       it "uses the access token if tokenExpiresAt is not set" $
-        happyRunner testConfig (testTokens & tokenExpiresAt .~ Nothing) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenAccess")
+        happyRunner testConfig (testTokens & tokenExpiresAt .~ Nothing) tokenApp `shouldBe` AccessToken ("accessTokenAccess")
       it "uses the access token if token not present in config" $
-        happyRunner testConfig (testTokens & token .~ Nothing) tokenApp `shouldBe` ValidToken (BS.pack "accessTokenAccess")
+        happyRunner testConfig (testTokens & accessToken .~ Nothing) tokenApp `shouldBe` AccessToken ("accessTokenAccess")
   describe "app" $ do
     context "empty path" $
       it "imports nothing" $
@@ -373,8 +367,8 @@ spec = do
           Right r ->
             let updatedTokenConfig =
                   testTokens &~ do
-                    token .= Just "accessTokenRefresh"
-                    refreshToken .= Just "refreshTokenRefresh"
+                    accessToken .= Just (AccessToken "accessTokenRefresh")
+                    refreshToken .= Just (RefreshToken "refreshTokenRefresh")
                     tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
                 updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
              in r
@@ -396,8 +390,8 @@ spec = do
           Right r ->
             let updatedTokenConfig =
                   testTokens &~ do
-                    token .= Just "accessTokenRefresh"
-                    refreshToken .= Just "refreshTokenRefresh"
+                    accessToken .= Just (AccessToken "accessTokenRefresh")
+                    refreshToken .= Just (RefreshToken "refreshTokenRefresh")
                     tokenExpiresAt
                       .= Just
                         ( addUTCTime
@@ -416,8 +410,7 @@ spec = do
                                  ],
                                  ( [ testTransactions
                                    ],
-                                   ( [ testTokens & tokenExpiresAt ?~ testCurrentTime,
-                                       updatedTokenConfig
+                                   ( [ updatedTokenConfig
                                      ],
                                      ()
                                    )
