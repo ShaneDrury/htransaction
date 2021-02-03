@@ -49,6 +49,7 @@ runapp ::
        HttpM MonzoTransactionsEndpoint,
        AccessTokenM,
        OAuthM,
+       HttpM TokenEndpoint,
        Input UTCTime,
        RandomM,
        PersistLastImportedM,
@@ -81,6 +82,7 @@ runapp args@Args {..} =
     . runPersistLastImportedM
     . runRandomROnIO
     . runGetTime
+    . runHttpMOnReq @TokenEndpoint
     . runOAuthM
     . saveTokens
     . runAccessTokenM

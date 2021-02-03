@@ -75,7 +75,7 @@ runMonzoM ::
   ) =>
   InterpreterFor (MonzoM v) r
 runMonzoM = interpret $ \case
-  GetMonzo endpoint options -> runApiRequest (https "api.monzo.com" /: endpoint) GET options
+  GetMonzo endpoint options -> runApiRequest (https "api.monzo.com" /: endpoint) GET NoReqBody options
 
 outputMonzoTransactions :: (Members '[MonzoM MonzoTransactionsEndpoint, Output [MonzoTransaction]] r) => Sem r a -> Sem r a
 outputMonzoTransactions = intercept $ \case

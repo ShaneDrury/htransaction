@@ -39,4 +39,4 @@ runFaM ::
   ) =>
   InterpreterFor (FaM v) r
 runFaM = interpret $ \case
-  GetFa endpoint options -> runApiRequest (https "api.freeagent.com" /: "v2" /: endpoint) GET options
+  GetFa endpoint options -> runApiRequest (https "api.freeagent.com" /: "v2" /: endpoint) GET NoReqBody options

@@ -5,8 +5,6 @@ module Token
     TokenEndpoint (..),
     OAuthM (..),
     getAccessToken,
-    getAccessTokenNetwork,
-    useRefreshToken,
     runApiTokenMConst,
     clientID,
     clientSecret,
@@ -41,7 +39,6 @@ import Data.Text
 import Data.Time
 import GHC.Generics
 import Logger
-import Network.HTTP.Req
 import Polysemy
 import Polysemy.BankAccount
 import Polysemy.Input
@@ -124,45 +121,6 @@ updateTokens TokenEndpoint {..} original currentTime =
           _refreshToken = Just refresh_token,
           _tokenExpiresAt = expiresAt
         }
-
-userAgentHeader :: Option scheme
-userAgentHeader = header "User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
-
-getAccessTokenNetwork :: Url 'Https -> String -> String -> AuthorizationCode -> IO TokenEndpoint
-getAccessTokenNetwork endpoint cID secret (AuthorizationCode authorizationCode) = runReq defaultHttpConfig $ do
-  r <-
-    req
-      POST
-      endpoint
-      ( ReqBodyUrlEnc $
-          "client_id" =: cID
-            <> "client_secret" =: secret
-            <> "code" =: authorizationCode
-            <> "redirect_uri" =: ("https://developers.google.com/oauthplayground" :: Text)
-            <> "scope" =: ("" :: Text)
-            <> "grant_type" =: ("authorization_code" :: Text)
-      )
-      jsonResponse
-      userAgentHeader
-  let body = responseBody r :: TokenEndpoint
-  return body
-
-useRefreshToken :: Url 'Https -> String -> String -> RefreshToken -> IO TokenEndpoint
-useRefreshToken endpoint cID secret (RefreshToken refresh) = runReq defaultHttpConfig $ do
-  r <-
-    req
-      POST
-      endpoint
-      ( ReqBodyUrlEnc $
-          "client_id" =: cID
-            <> "client_secret" =: secret
-            <> "refresh_token" =: refresh
-            <> "grant_type" =: ("refresh_token" :: Text)
-      )
-      jsonResponse
-      userAgentHeader
-  let body = responseBody r :: TokenEndpoint
-  return body
 
 authorizationUrl :: String -> String
 authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"

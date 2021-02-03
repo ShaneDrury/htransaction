@@ -17,21 +17,21 @@ import Types
 import Prelude
 
 data HttpM r m a where
-  RunRequest :: (HttpMethod method, HttpBodyAllowed (AllowsBody method) 'NoBody) => Url 'Https -> method -> Option 'Https -> HttpM v m (Either ApiError v)
+  RunRequest :: (HttpMethod method, HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpBody body) => Url 'Https -> method -> body -> Option 'Https -> HttpM v m (Either ApiError v)
 
 $(makeSem ''HttpM)
 
 data ApiHttpM r m a where
-  RunApiRequest :: (HttpMethod method, HttpBodyAllowed (AllowsBody method) 'NoBody) => Url 'Https -> method -> Option 'Https -> ApiHttpM v m (Either ApiError v)
+  RunApiRequest :: (HttpMethod method, HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpBody body) => Url 'Https -> method -> body -> Option 'Https -> ApiHttpM v m (Either ApiError v)
 
 $(makeSem ''ApiHttpM)
 
-mkRequest :: (MonadHttp m, FromJSON a, HttpMethod method, HttpBodyAllowed (AllowsBody method) 'NoBody) => Url 'Https -> method -> Option 'Https -> m (JsonResponse a)
-mkRequest url method options =
+mkRequest :: (MonadHttp m, FromJSON a, HttpMethod method, HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpBody body) => Url 'Https -> method -> body -> Option 'Https -> m (JsonResponse a)
+mkRequest url method body options =
   req
     method
     url
-    NoReqBody
+    body
     jsonResponse
     ( header
         "User-Agent"
@@ -39,12 +39,12 @@ mkRequest url method options =
         <> options
     )
 
-runHttpMOnReq :: forall v r. (Members '[AccessTokenM, Embed IO, Error HttpException] r, FromJSON v) => InterpreterFor (HttpM v) r
+runHttpMOnReq :: forall v r. (Members '[Embed IO, Error HttpException] r, FromJSON v) => InterpreterFor (HttpM v) r
 runHttpMOnReq = interpret $ \case
-  RunRequest url method options -> do
+  RunRequest url method body options -> do
     result <- embed $
       E.try $ do
-        r <- runReq defaultHttpConfig $ mkRequest url method options
+        r <- runReq defaultHttpConfig $ mkRequest url method body options
         return (responseBody r :: v)
     case result of
       Right res -> return $ Right (res :: v)
@@ -55,9 +55,9 @@ runHttpMOnReq = interpret $ \case
 
 runApiHttpMOnTokens :: forall v r. (Members '[AccessTokenM, HttpM v] r) => InterpreterFor (ApiHttpM v) r
 runApiHttpMOnTokens = interpret $ \case
-  RunApiRequest url method options -> do
+  RunApiRequest url method body options -> do
     tkn <- getAccessToken
-    runRequest url method (tokenToHeader tkn <> options)
+    runRequest url method body (tokenToHeader tkn <> options)
 
 retryOnUnauthorized ::
   forall v r a.
@@ -74,13 +74,13 @@ retryOnUnauthorized ::
 retryOnUnauthorized =
   intercept @(ApiHttpM v)
     ( \case
-        RunApiRequest url method options -> do
-          r <- runApiRequest @v url method options
+        RunApiRequest url method body options -> do
+          r <- runApiRequest @v url method body options
           case r of
             Left Unauthorized -> do
               err "Unauthorized"
               tkn <- refreshAccessToken
-              runRequest @v url method (tokenToHeader tkn <> options)
+              runRequest @v url method body (tokenToHeader tkn <> options)
             s -> return s
     )
 
