@@ -108,7 +108,7 @@ refreshTokenEndpoint =
       token_type = "foo",
       expires_in = 86400,
       refresh_token = Token.RefreshToken "refreshTokenRefresh",
-      refresh_token_expires_in = 123
+      refresh_token_expires_in = Just 123
     }
 
 accessTokenEndpoint :: TokenEndpoint
@@ -118,7 +118,7 @@ accessTokenEndpoint =
       token_type = "foo",
       expires_in = 86400,
       refresh_token = Token.RefreshToken "refreshTokenAccess",
-      refresh_token_expires_in = 123
+      refresh_token_expires_in = Just 123
     }
 
 authorizationCode :: AuthorizationCode

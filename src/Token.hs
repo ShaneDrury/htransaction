@@ -103,7 +103,7 @@ data TokenEndpoint = TokenEndpoint
     token_type :: String,
     expires_in :: Integer,
     refresh_token :: RefreshToken,
-    refresh_token_expires_in :: Integer
+    refresh_token_expires_in :: Maybe Integer
   }
   deriving stock (Eq, Show)
   deriving anyclass (FromJSON)
