@@ -4,20 +4,16 @@ module Api
   ( TransactionsApiM (..),
     getTransactionsApi,
     runTransactionsApiM,
-    TransactionsEndpoint (..),
-    faToTransaction,
   )
 where
 
 import Config
 import Control.Lens
 import Control.Monad
-import Data.Aeson (FromJSON, ToJSON)
 import Data.Text hiding (length)
 import Data.Time
 import qualified Db as DB
 import Fa
-import GHC.Generics (Generic)
 import Logger
 import Monzo
 import Network.HTTP.Req
@@ -31,12 +27,6 @@ data TransactionsApiM m a where
 
 $(makeSem ''TransactionsApiM)
 
-newtype TransactionsEndpoint = TransactionsEndpoint
-  { bank_transactions :: [FaTransaction]
-  }
-  deriving stock (Eq, Generic, Show)
-  deriving anyclass (FromJSON, ToJSON)
-
 monzoToTransaction :: MonzoTransaction -> Transaction
 monzoToTransaction MonzoTransaction {..} =
   Transaction
@@ -47,15 +37,6 @@ monzoToTransaction MonzoTransaction {..} =
     }
   where
     descrip = maybe (if null notes then description else notes) name merchant
-
-faToTransaction :: FaTransaction -> Transaction
-faToTransaction FaTransaction {..} =
-  Transaction
-    { dated_on = dated_on,
-      description = description,
-      amount = amount,
-      comment = Nothing
-    }
 
 relatedTransaction :: (Members '[DB.DbM] r) => DB.MonzoTransaction -> Sem r (Maybe DB.MonzoTransaction)
 relatedTransaction tx = case DB.monzoTransactionOriginalTransactionId tx of
@@ -84,25 +65,10 @@ createTransaction tx = do
     Just other -> return $ useExistingTransaction tx other
     Nothing -> return $ monzoToTransaction tx
 
-runTransactionsApiM :: (Members '[FaM TransactionsEndpoint, MonzoM MonzoTransactionsEndpoint, Error ApiError, Logger, DB.DbM] r) => InterpreterFor TransactionsApiM r
+runTransactionsApiM :: (Members '[FaM, MonzoM MonzoTransactionsEndpoint, Error ApiError, Logger, DB.DbM] r) => InterpreterFor TransactionsApiM r
 runTransactionsApiM = interpret $ \case
   GetTransactionsApi bankAccount fromDate -> case bankAccount ^. bankInstitution of
-    Fa -> do
-      etx <-
-        getFa
-          "bank_transactions"
-          ( "bank_account" =: bankAccount ^. bankAccountId
-              <> "from_date" =: fromDate
-              <> "sort" =: ("dated_on" :: Text)
-              <> "per_page" =: (100 :: Int)
-          )
-      case etx of
-        Right endpoint -> do
-          when (length tx == 100) (warn "WARNING: Number of transactions close to limit")
-          return $ faToTransaction <$> tx
-          where
-            tx = bank_transactions endpoint
-        Left e -> throw e
+    Fa -> getFaTransactions bankAccount fromDate
     Monzo -> do
       etx <-
         getMonzo @MonzoTransactionsEndpoint

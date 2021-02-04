@@ -200,7 +200,7 @@ runAppDeep ::
        TransactionsManager,
        TransactionsApiM,
        DB.DbM,
-       FaM TransactionsEndpoint,
+       FaM,
        MZ.MonzoM MZ.MonzoTransactionsEndpoint,
        ApiHttpM TransactionsEndpoint,
        ApiHttpM MZ.MonzoTransactionsEndpoint,
@@ -249,7 +249,7 @@ runAppDeep tx config tokens =
     . runApiHttpMOnTokens @TransactionsEndpoint
     . retryOnUnauthorized
     . MZ.runMonzoM @MZ.MonzoTransactionsEndpoint
-    . runFaM @TransactionsEndpoint
+    . runFaM
     . runDbEmpty
     . runTransactionsApiM
     . runTransactionsManager

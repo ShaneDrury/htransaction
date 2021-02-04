@@ -42,7 +42,7 @@ runapp ::
        Output [MonzoTransaction],
        DB.DbM,
        MonzoM MonzoTransactionsEndpoint,
-       FaM TransactionsEndpoint,
+       FaM,
        ApiHttpM TransactionsEndpoint,
        ApiHttpM MonzoTransactionsEndpoint,
        HttpM TransactionsEndpoint,
@@ -90,7 +90,7 @@ runapp args@Args {..} =
     . runHttpMOnReq @TransactionsEndpoint
     . runApiHttpMOnTokens @MonzoTransactionsEndpoint
     . runApiHttpMOnTokens @TransactionsEndpoint
-    . runFaM @TransactionsEndpoint
+    . runFaM
     . runMonzoM @MonzoTransactionsEndpoint
     . DB.runDbMOnSqlite dbFile
     . outputMonzoOnDb
