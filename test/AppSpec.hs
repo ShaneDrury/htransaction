@@ -199,9 +199,10 @@ runAppDeep ::
     '[ AppM,
        TransactionsManager,
        TransactionsApiM,
+       MZ.MonzoM,
+       Output [MZ.MonzoTransaction],
        DB.DbM,
        FaM,
-       MZ.MonzoM MZ.MonzoTransactionsEndpoint,
        ApiHttpM TransactionsEndpoint,
        ApiHttpM MZ.MonzoTransactionsEndpoint,
        HttpM TransactionsEndpoint,
@@ -222,7 +223,7 @@ runAppDeep ::
        Error AppError
      ]
     a ->
-  Either AppError ([LogMsg], ([Config], ([[Transaction]], ([TokenSet], a))))
+  Either AppError ([LogMsg], ([Config], ([[Transaction]], ([TokenSet], ([[MZ.MonzoTransaction]], a)))))
 runAppDeep tx config tokens =
   run
     . handleErrors
@@ -248,9 +249,10 @@ runAppDeep tx config tokens =
     . runApiHttpMOnTokens @MZ.MonzoTransactionsEndpoint
     . runApiHttpMOnTokens @TransactionsEndpoint
     . retryOnUnauthorized
-    . MZ.runMonzoM @MZ.MonzoTransactionsEndpoint
     . runFaM
     . runDbEmpty
+    . runOutputList @[MZ.MonzoTransaction]
+    . MZ.runMonzoM
     . runTransactionsApiM
     . runTransactionsManager
     . runApp
@@ -327,7 +329,7 @@ spec = do
                              ( [ transactions_100
                                ],
                                ( [],
-                                 ()
+                                 ([], ())
                                )
                              )
                            )
@@ -346,7 +348,7 @@ spec = do
                              ( [ testTransactions
                                ],
                                ( [],
-                                 ()
+                                 ([], ())
                                )
                              )
                            )
@@ -359,7 +361,7 @@ spec = do
               `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                              (Info, "Number of transactions: 0")
                            ],
-                           ([], ([[]], ([], ())))
+                           ([], ([[]], ([], ([], ()))))
                          )
       it "tries to refresh tokens if needed" $
         case runAppDeep [Just testTransactions] testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) app of
@@ -380,7 +382,7 @@ spec = do
                                  ],
                                  ( [ testTransactions
                                    ],
-                                   ([updatedTokenConfig], ())
+                                   ([updatedTokenConfig], ([], ()))
                                  )
                                )
                              )
@@ -412,7 +414,7 @@ spec = do
                                    ],
                                    ( [ updatedTokenConfig
                                      ],
-                                     ()
+                                     ([], ())
                                    )
                                  )
                                )

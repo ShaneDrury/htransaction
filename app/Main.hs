@@ -39,9 +39,9 @@ runapp ::
        TransactionsManager,
        TransactionsApiM,
        Output [Transaction],
+       MonzoM,
        Output [MonzoTransaction],
        DB.DbM,
-       MonzoM MonzoTransactionsEndpoint,
        FaM,
        ApiHttpM TransactionsEndpoint,
        ApiHttpM MonzoTransactionsEndpoint,
@@ -91,10 +91,9 @@ runapp args@Args {..} =
     . runApiHttpMOnTokens @MonzoTransactionsEndpoint
     . runApiHttpMOnTokens @TransactionsEndpoint
     . runFaM
-    . runMonzoM @MonzoTransactionsEndpoint
     . DB.runDbMOnSqlite dbFile
     . outputMonzoOnDb
-    . outputMonzoTransactions
+    . runMonzoM
     . retryOnUnauthorized
     . runOutputOnCsv outfile
     . runTransactionsApiM
