@@ -12,6 +12,8 @@ import Data.Maybe (fromJust)
 import Data.Time
 import qualified Db as DB
 import Fa
+import Interpretation.Http
+import Interpretation.OAuth
 import Logger
 import qualified Monzo as MZ
 import qualified Network.HTTP.Req as H
@@ -23,6 +25,7 @@ import Polysemy.Error
 import Polysemy.Http
 import Polysemy.Input
 import Polysemy.LastImported
+import Polysemy.OAuth
 import Polysemy.Output
 import Polysemy.State
 import Test.Hspec
@@ -104,20 +107,20 @@ testTokens =
 refreshTokenEndpoint :: TokenEndpoint
 refreshTokenEndpoint =
   TokenEndpoint
-    { access_token = Token.AccessToken "accessTokenRefresh",
+    { access_token = AccessToken "accessTokenRefresh",
       token_type = "foo",
       expires_in = 86400,
-      refresh_token = Token.RefreshToken "refreshTokenRefresh",
+      refresh_token = RefreshToken "refreshTokenRefresh",
       refresh_token_expires_in = Just 123
     }
 
 accessTokenEndpoint :: TokenEndpoint
 accessTokenEndpoint =
   TokenEndpoint
-    { access_token = Token.AccessToken "accessTokenAccess",
+    { access_token = AccessToken "accessTokenAccess",
       token_type = "foo",
       expires_in = 86400,
-      refresh_token = Token.RefreshToken "refreshTokenAccess",
+      refresh_token = RefreshToken "refreshTokenAccess",
       refresh_token_expires_in = Just 123
     }
 

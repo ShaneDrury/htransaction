@@ -12,6 +12,8 @@ import Control.Monad
 import Data.Time.Clock
 import qualified Db as DB
 import Fa
+import Interpretation.Http
+import Interpretation.OAuth
 import Logger
 import Monzo
 import Network.HTTP.Req
@@ -23,6 +25,7 @@ import Polysemy.Error
 import Polysemy.Http
 import Polysemy.Input
 import Polysemy.LastImported
+import Polysemy.OAuth
 import Polysemy.Output
 import Polysemy.Random
 import Polysemy.State
@@ -34,6 +37,7 @@ import Prelude
 
 runapp ::
   Args ->
+  BankInstitution ->
   Sem
     '[ AppM,
        TransactionsManager,
@@ -45,10 +49,10 @@ runapp ::
        FaM,
        ApiHttpM TransactionsEndpoint,
        ApiHttpM MonzoTransactionsEndpoint,
-       HttpM TransactionsEndpoint,
-       HttpM MonzoTransactionsEndpoint,
        AccessTokenM,
        OAuthM,
+       HttpM TransactionsEndpoint,
+       HttpM MonzoTransactionsEndpoint,
        HttpM TokenEndpoint,
        Input UTCTime,
        RandomM,
@@ -66,7 +70,7 @@ runapp ::
      ]
     a ->
   IO (Either AppError a)
-runapp args@Args {..} =
+runapp args@Args {..} institution =
   runM
     . handleErrors
     . runOutputOnLog verbose
@@ -83,17 +87,17 @@ runapp args@Args {..} =
     . runRandomROnIO
     . runGetTime
     . runHttpMOnReq @TokenEndpoint
-    . runOAuthM
-    . saveTokens
-    . runAccessTokenM
     . runHttpMOnReq @MonzoTransactionsEndpoint
     . runHttpMOnReq @TransactionsEndpoint
+    . runOAuthMOnInstitution institution
+    . runAccessTokenM
     . runApiHttpMOnTokens @MonzoTransactionsEndpoint
     . runApiHttpMOnTokens @TransactionsEndpoint
     . runFaM
     . DB.runDbMOnSqlite dbFile
     . outputMonzoOnDb
     . runMonzoM
+    . saveTokens
     . retryOnUnauthorized
     . runOutputOnCsv outfile
     . runTransactionsApiM
@@ -104,10 +108,24 @@ runapp args@Args {..} =
 runSync :: (Members '[AppM] r) => Sem r ()
 runSync = syncTransactions
 
+getStaticInstitution :: Args -> IO BankInstitution
+getStaticInstitution args@Args {..} =
+  ( runM
+      . runLoggerOnRainbow
+      . runOutputOnLog verbose
+      . runGetConfig configFile
+      . runWriteConfig configFile
+      . runStateCached @Config
+      . runInputConst args
+      . runBankAccountsMOnConfig
+  )
+    getInstitution
+
 main :: IO ()
 main = do
   options <- getArgs
-  result <- runapp options runSync
+  institution <- getStaticInstitution options
+  result <- runapp options institution runSync
   case result of
     Left e -> print e
     Right () -> return ()

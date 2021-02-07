@@ -11,6 +11,8 @@ module Monzo
     MonzoMerchant (..),
     toDbTransaction,
     excludeDeclinedTransactions,
+    monzoAuthUrl,
+    monzoAuthEndpoint,
   )
 where
 
@@ -31,8 +33,6 @@ import Polysemy.Http
 import Polysemy.Output
 import Types
 import Prelude hiding (id, null)
-
--- TODO: Add auth endpoints here too
 
 data MonzoM m a where
   GetMonzoTransactions :: BankAccount -> Day -> MonzoM m [Transaction]
@@ -111,6 +111,9 @@ createTransaction tx = do
     Just other -> return $ useExistingTransaction tx other
     Nothing -> return $ monzoToTransaction tx
 
+monzoAuthEndpoint :: Url 'Https
+monzoAuthEndpoint = https "api.monzo.com" /: "oauth2" /: "token"
+
 runMonzoM ::
   ( Members
       '[ ApiHttpM MonzoTransactionsEndpoint,
@@ -159,3 +162,7 @@ maybeBool2Bool = fromMaybe False
 
 excludeDeclinedTransactions :: [MonzoTransaction] -> [MonzoTransaction]
 excludeDeclinedTransactions = filter (\tx -> not $ maybeBool2Bool (Data.Text.null <$> declined_reason tx))
+
+monzoAuthUrl :: String -> String -> String
+monzoAuthUrl clientId state =
+  "https://auth.monzo.com/?client_id=" <> clientId <> "&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground&response_type=code&state=" <> state

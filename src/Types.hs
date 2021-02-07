@@ -6,6 +6,10 @@ module Types
     InvalidTokenReason (..),
     Transaction (..),
     TransactionDate (..),
+    AccessToken (..),
+    RefreshToken (..),
+    AuthorizationCode (..),
+    TokenEndpoint (..),
   )
 where
 
@@ -54,3 +58,24 @@ data Transaction = Transaction
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, CSV.ToRecord, ToJSON)
+
+newtype AccessToken = AccessToken Text
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
+
+newtype RefreshToken = RefreshToken Text
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (FromJSON, ToJSON)
+
+newtype AuthorizationCode = AuthorizationCode String deriving stock (Eq, Show)
+
+data TokenEndpoint = TokenEndpoint
+  { access_token :: AccessToken,
+    token_type :: String,
+    expires_in :: Integer,
+    refresh_token :: RefreshToken,
+    refresh_token_expires_in :: Maybe Integer
+  }
+  deriving stock (Eq, Show)
+  deriving anyclass (FromJSON)
+  deriving stock (Generic)

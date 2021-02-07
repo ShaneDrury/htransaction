@@ -6,6 +6,8 @@ module Fa
     runFaM,
     FaTransaction (..),
     TransactionsEndpoint (..),
+    faAuthEndpoint,
+    faAuthorizationUrl,
   )
 where
 
@@ -55,6 +57,9 @@ $(makeSem ''FaM)
 runFaRequest :: (Members '[ApiHttpM v] r) => Text -> Option 'Https -> Sem r (Either ApiError v)
 runFaRequest endpoint = runApiRequest (https "api.freeagent.com" /: "v2" /: endpoint) GET NoReqBody
 
+faAuthEndpoint :: Url 'Https
+faAuthEndpoint = https "api.freeagent.com" /: "v2" /: "token_endpoint"
+
 runFaM ::
   ( Members
       '[ ApiHttpM TransactionsEndpoint,
@@ -81,3 +86,6 @@ runFaM = interpret $ \case
         where
           tx = bank_transactions endpoint
       Left e -> throw e
+
+faAuthorizationUrl :: String -> String
+faAuthorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"

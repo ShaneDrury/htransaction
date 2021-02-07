@@ -3,29 +3,22 @@
 module Token
   ( runGetTime,
     TokenEndpoint (..),
-    OAuthM (..),
     getAccessToken,
-    runApiTokenMConst,
     clientID,
     clientSecret,
     accessToken,
     tokenExpiresAt,
     refreshToken,
     TokenSet (..),
-    authorizationUrl,
     runGetTokens,
     runAccessTokenM,
     BankInstitutionTokens (..),
-    monzoAuthUrl,
     exchangeAuthCode,
     exchangeRefreshToken,
     updateTokens,
     AccessTokenM (..),
-    AccessToken (..),
     refreshAccessToken,
     getAuthCode,
-    AuthorizationCode (..),
-    RefreshToken (..),
   )
 where
 
@@ -35,26 +28,16 @@ import Data.Aeson
 import Data.Aeson.TH
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Text
 import Data.Time
 import GHC.Generics
 import Logger
 import Polysemy
 import Polysemy.BankAccount
 import Polysemy.Input
+import Polysemy.OAuth
 import Polysemy.State
 import Types
 import Prelude
-
-newtype AccessToken = AccessToken Text
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromJSON, ToJSON)
-
-newtype RefreshToken = RefreshToken Text
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (FromJSON, ToJSON)
-
-newtype AuthorizationCode = AuthorizationCode String deriving stock (Eq, Show)
 
 data TokenSet = TokenSet
   { _accessToken :: Maybe AccessToken,
@@ -95,24 +78,6 @@ data AccessTokenM m a where
 
 $(makeSem ''AccessTokenM)
 
-data TokenEndpoint = TokenEndpoint
-  { access_token :: AccessToken,
-    token_type :: String,
-    expires_in :: Integer,
-    refresh_token :: RefreshToken,
-    refresh_token_expires_in :: Maybe Integer
-  }
-  deriving stock (Eq, Show)
-  deriving anyclass (FromJSON)
-  deriving stock (Generic)
-
-data OAuthM m a where
-  GetAuthCode :: OAuthM m AuthorizationCode
-  ExchangeAuthCode :: AuthorizationCode -> OAuthM m TokenEndpoint
-  ExchangeRefreshToken :: RefreshToken -> OAuthM m TokenEndpoint
-
-$(makeSem ''OAuthM)
-
 updateTokens :: TokenEndpoint -> TokenSet -> UTCTime -> TokenSet
 updateTokens TokenEndpoint {..} original currentTime =
   let expiresAt = Just $ addUTCTime (fromIntegral expires_in) currentTime
@@ -122,22 +87,9 @@ updateTokens TokenEndpoint {..} original currentTime =
           _tokenExpiresAt = expiresAt
         }
 
-authorizationUrl :: String -> String
-authorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"
-
-monzoAuthUrl :: String -> String -> String
-monzoAuthUrl clientId state =
-  "https://auth.monzo.com/?client_id=" <> clientId <> "&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground&response_type=code&state=" <> state
-
 runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
-
-runApiTokenMConst :: TokenEndpoint -> TokenEndpoint -> AuthorizationCode -> InterpreterFor OAuthM r
-runApiTokenMConst refresh access authcode = interpret $ \case
-  ExchangeRefreshToken _ -> return refresh
-  ExchangeAuthCode _ -> return access
-  GetAuthCode -> return authcode
 
 runGetTokens :: (Members '[Logger, BankAccountsM, Embed IO] r) => FilePath -> InterpreterFor (Input TokenSet) r
 runGetTokens fp = interpret $ \case
