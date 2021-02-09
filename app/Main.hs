@@ -90,6 +90,7 @@ runapp args@Args {..} institution =
     . runHttpMOnReq @MonzoTransactionsEndpoint
     . runHttpMOnReq @TransactionsEndpoint
     . runOAuthMOnInstitution institution
+    . saveTokens
     . runAccessTokenM
     . runApiHttpMOnTokens @MonzoTransactionsEndpoint
     . runApiHttpMOnTokens @TransactionsEndpoint
@@ -97,7 +98,6 @@ runapp args@Args {..} institution =
     . DB.runDbMOnSqlite dbFile
     . outputMonzoOnDb
     . runMonzoM
-    . saveTokens
     . retryOnUnauthorized @MonzoTransactionsEndpoint
     . retryOnUnauthorized @TransactionsEndpoint
     . runOutputOnCsv outfile
