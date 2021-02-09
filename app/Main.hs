@@ -98,7 +98,8 @@ runapp args@Args {..} institution =
     . outputMonzoOnDb
     . runMonzoM
     . saveTokens
-    . retryOnUnauthorized
+    . retryOnUnauthorized @MonzoTransactionsEndpoint
+    . retryOnUnauthorized @TransactionsEndpoint
     . runOutputOnCsv outfile
     . runTransactionsApiM
     . runTransactionsManager
