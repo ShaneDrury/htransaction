@@ -28,7 +28,7 @@ newtype LastImported = LastImported Day
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON)
 
-data ApiError = Unauthorized deriving stock (Eq, Show)
+newtype ApiError = Unauthorized H.HttpException deriving stock (Show)
 
 data InvalidTokenReason = Expired | Missing deriving stock (Eq, Show)
 

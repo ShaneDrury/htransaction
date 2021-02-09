@@ -44,7 +44,7 @@ runHttpMOnReq = interpret $ \case
       Right res -> return $ Right (res :: v)
       Left err' ->
         if isUnauthorized err'
-          then return $ Left Unauthorized
+          then return $ Left (Unauthorized err')
           else throw @HttpException err'
 
 runApiHttpMOnTokens :: forall v r. (Members '[AccessTokenM, HttpM v] r) => InterpreterFor (ApiHttpM v) r
@@ -71,7 +71,7 @@ retryOnUnauthorized =
         RunApiRequest url method body options -> do
           r <- runApiRequest @v url method body options
           case r of
-            Left Unauthorized -> do
+            Left (Unauthorized _)-> do
               err "Unauthorized"
               tkn <- refreshAccessToken
               runRequest @v url method body (tokenToHeader tkn <> options)

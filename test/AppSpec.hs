@@ -187,7 +187,7 @@ runHttpMTest convert =
             Just mtxs ->
               case mtxs of
                 Just txs -> return $ Right $ convert txs
-                Nothing -> return $ Left Unauthorized
+                Nothing -> return $ Left $ Unauthorized (H.JsonHttpException "foo")
             Nothing -> return $ Right $ convert []
     )
 
@@ -461,6 +461,6 @@ spec = do
                              )
       it "only retries once if unauthorized" $
         case runAppDeep [Nothing, Nothing] testConfig testArgsMonzo testTokens app of
-          Left (AppApiError e) -> e `shouldBe` Unauthorized
+          Left (AppApiError (Unauthorized _)) -> return ()
           Left e -> expectationFailure $ "expected Left AppApiError, got Left: " ++ show e
           Right r -> expectationFailure $ "expected Left, got Right: " ++ show r
