@@ -91,7 +91,7 @@ testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "202
 testConfig :: Config
 testConfig =
   Config
-    { _bankAccounts = [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Fa}]
+    { _bankAccounts = [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Fa}, BankAccount {_bankAccountId = "2", _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Monzo}]
     }
 
 testTokens :: TokenSet
@@ -194,9 +194,13 @@ runHttpMTest convert =
 testArgs :: Args
 testArgs = Args {Cli.bankAccountId = "1", outfile = "", configFile = "", tokensFile = "", verbose = True, dbFile = ""}
 
+testArgsMonzo :: Args
+testArgsMonzo = Args {Cli.bankAccountId = "2", outfile = "", configFile = "", tokensFile = "", verbose = True, dbFile = ""}
+
 runAppDeep ::
   [Maybe [Transaction]] ->
   Config ->
+  Args ->
   TokenSet ->
   Sem
     '[ AppM,
@@ -227,7 +231,7 @@ runAppDeep ::
      ]
     a ->
   Either AppError ([LogMsg], ([Config], ([[Transaction]], ([TokenSet], ([[MZ.MonzoTransaction]], a)))))
-runAppDeep tx config tokens =
+runAppDeep tx config args tokens =
   run
     . handleErrors
     . runOutputList @LogMsg
@@ -235,7 +239,7 @@ runAppDeep tx config tokens =
     . runInputConst config
     . runOutputList @Config
     . runStateCached @Config
-    . runInputConst testArgs
+    . runInputConst args
     . runBankAccountsMOnConfig
     . runPersistLastImportedM
     . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint authorizationCode
@@ -251,7 +255,8 @@ runAppDeep tx config tokens =
     . runHttpMTest @TransactionsEndpoint transactionsEndpoint
     . runApiHttpMOnTokens @MZ.MonzoTransactionsEndpoint
     . runApiHttpMOnTokens @TransactionsEndpoint
-    . retryOnUnauthorized
+    . retryOnUnauthorized @MZ.MonzoTransactionsEndpoint
+    . retryOnUnauthorized @TransactionsEndpoint
     . runFaM
     . runDbEmpty
     . runOutputList @[MZ.MonzoTransaction]
@@ -323,7 +328,7 @@ spec = do
                   }
               )
       it "imports 100 transaction and produces a warning" $
-        case runAppDeep [Just transactions_100] testConfig testTokens app of
+        case runAppDeep [Just transactions_100] testConfig testArgs testTokens app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -339,7 +344,7 @@ spec = do
                          )
     context "happy, deep path" $ do
       it "imports transactions, outputs them, updates config" $
-        case runAppDeep [Just testTransactions] testConfig testTokens app of
+        case runAppDeep [Just testTransactions] testConfig testArgs testTokens app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -357,7 +362,7 @@ spec = do
                            )
                          )
       it "imports 0 transactions" $
-        case runAppDeep [Just []] testConfig testTokens app of
+        case runAppDeep [Just []] testConfig testArgs testTokens app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -367,7 +372,7 @@ spec = do
                            ([], ([[]], ([], ([], ()))))
                          )
       it "tries to refresh tokens if needed" $
-        case runAppDeep [Just testTransactions] testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) app of
+        case runAppDeep [Just testTransactions] testConfig testArgs (testTokens & tokenExpiresAt .~ expiredTokenTime) app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig =
@@ -375,7 +380,7 @@ spec = do
                     accessToken .= Just (AccessToken "accessTokenRefresh")
                     refreshToken .= Just (RefreshToken "refreshTokenRefresh")
                     tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
-                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}, BankAccount {_bankAccountId = "2", _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Monzo}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (Info, "Outputting last imported day of 2020-04-21"),
@@ -390,7 +395,7 @@ spec = do
                                )
                              )
       it "retries if unauthorized" $
-        case runAppDeep [Nothing, Just testTransactions] testConfig testTokens app of
+        case runAppDeep [Nothing, Just testTransactions] testConfig testArgs testTokens app of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig =
@@ -404,7 +409,7 @@ spec = do
                             )
                             testCurrentTime
                         )
-                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}]
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 21, _bankInstitution = Fa}, BankAccount {_bankAccountId = "2", _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Monzo}]
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),
@@ -422,3 +427,40 @@ spec = do
                                  )
                                )
                              )
+      it "retries if unauthorized for Monzo" $
+        case runAppDeep [Nothing, Just testTransactions] testConfig testArgsMonzo testTokens app of
+          Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
+          Right r ->
+            let updatedTokenConfig =
+                  testTokens &~ do
+                    accessToken .= Just (AccessToken "accessTokenRefresh")
+                    refreshToken .= Just (RefreshToken "refreshTokenRefresh")
+                    tokenExpiresAt
+                      .= Just
+                        ( addUTCTime
+                            ( 86400 :: NominalDiffTime
+                            )
+                            testCurrentTime
+                        )
+                updatedLastImportConfig = testConfig & bankAccounts .~ [BankAccount {_bankAccountId = "1", _lastImported = LastImported $ fromGregorian 2020 4 19, _bankInstitution = Fa}, BankAccount {_bankAccountId = "2", _lastImported = LastImported $ fromGregorian 2020 4 20, _bankInstitution = Monzo}]
+             in r
+                  `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
+                                 (LogError, "Unauthorized"),
+                                 (Info, "Outputting last imported day of 2020-04-20"),
+                                 (Info, "Number of transactions: 2")
+                               ],
+                               ( [ updatedLastImportConfig
+                                 ],
+                                 ( [[Transaction {dated_on = TransactionDate $ fromGregorian 2020 4 20, description = "merchant_name", amount = "123.0", comment = Just "Foo"}, Transaction {dated_on = TransactionDate $ fromGregorian 2020 4 20, description = "merchant_name", amount = "123.0", comment = Just "Foo"}]],
+                                   ( [ updatedTokenConfig
+                                     ],
+                                     ([tx2monzo <$> testTransactions], ())
+                                   )
+                                 )
+                               )
+                             )
+      it "only retries once if unauthorized" $
+        case runAppDeep [Nothing, Nothing] testConfig testArgsMonzo testTokens app of
+          Left (AppApiError e) -> e `shouldBe` Unauthorized
+          Left e -> expectationFailure $ "expected Left AppApiError, got Left: " ++ show e
+          Right r -> expectationFailure $ "expected Left, got Right: " ++ show r
