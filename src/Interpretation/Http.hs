@@ -71,7 +71,7 @@ retryOnUnauthorized =
         RunApiRequest url method body options -> do
           r <- runApiRequest @v url method body options
           case r of
-            Left (Unauthorized _)-> do
+            Left (Unauthorized _) -> do
               err "Unauthorized"
               tkn <- refreshAccessToken
               runRequest @v url method body (tokenToHeader tkn <> options)

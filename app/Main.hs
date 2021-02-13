@@ -29,7 +29,6 @@ import Polysemy.OAuth
 import Polysemy.Output
 import Polysemy.Random
 import Polysemy.State
-import Polysemy.Trace
 import Token
 import Transaction
 import Types
@@ -62,7 +61,6 @@ runapp ::
        Input Args,
        State Config,
        Log LogMsg,
-       Trace,
        Error HttpException,
        Error ApiError,
        Error AppError,
@@ -73,7 +71,6 @@ runapp ::
 runapp args@Args {..} institution =
   runM
     . handleErrors
-    . runOutputOnLog verbose
     . runLoggerOnRainbow
     . runGetConfig configFile
     . runWriteConfig configFile
@@ -113,7 +110,6 @@ getStaticInstitution :: Args -> IO BankInstitution
 getStaticInstitution args@Args {..} =
   ( runM
       . runLoggerOnRainbow
-      . runOutputOnLog verbose
       . runGetConfig configFile
       . runWriteConfig configFile
       . runStateCached @Config

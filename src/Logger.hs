@@ -1,6 +1,5 @@
 module Logger
-  ( runOutputOnLog,
-    LogMsg,
+  ( LogMsg,
     info,
     Logger,
     runLoggerAsOutput,
@@ -12,17 +11,11 @@ module Logger
 where
 
 import Colog.Polysemy.Effect
-import Control.Monad
 import qualified Data.Text as T
 import Polysemy
 import Polysemy.Output
-import Polysemy.Trace
 import Rainbow
 import Prelude hiding (log)
-
-runOutputOnLog :: (Members '[Embed IO] r) => Bool -> InterpreterFor Trace r
-runOutputOnLog verbose = interpret $ \case
-  Trace msg -> embed $ when verbose (putStrLn msg)
 
 data LogType = Info | Warning | LogError deriving stock (Eq, Show)
 
