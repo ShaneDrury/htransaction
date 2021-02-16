@@ -20,14 +20,14 @@ runStateCached =
     . reinterpret3
       ( \case
           Get -> do
-            cachedConfig <- get @(Cached v)
-            case cachedConfig of
+            cached <- get @(Cached v)
+            case cached of
               Dirty -> do
-                cfg <- input @v
-                put @(Cached v) (Cached cfg)
-                return cfg
-              Cached cfg -> return cfg
-          Put cfg -> do
-            output @v cfg
-            put @(Cached v) (Cached cfg)
+                newVal <- input @v
+                put @(Cached v) (Cached newVal)
+                return newVal
+              Cached val -> return val
+          Put val -> do
+            output @v val
+            put @(Cached v) (Cached val)
       )
