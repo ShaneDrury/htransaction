@@ -3,6 +3,7 @@ module Polysemy.Config
     runWriteConfig,
     runWriteTokens,
     saveTokens,
+    runGetConfigStatic,
   )
 where
 
@@ -31,6 +32,10 @@ runGetConfig fp = interpret $ \case
     case ecfg of
       Left e -> error e
       Right cfg -> return cfg
+
+runGetConfigStatic :: Config -> InterpreterFor (Input Config) r
+runGetConfigStatic cfg = interpret $ \case
+  Input -> return cfg
 
 runWriteTokens :: (Members '[Logger, Embed IO, BankAccountsM] r) => FilePath -> InterpreterFor (Output TokenSet) r
 runWriteTokens fp = interpret $ \case

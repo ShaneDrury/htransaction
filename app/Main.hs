@@ -28,13 +28,14 @@ import Prelude
 
 runapp ::
   Args ->
+  Config ->
   BankInstitution ->
   IO (Either AppError ())
-runapp args@Args {..} institution =
+runapp args@Args {..} config institution =
   ( runM
       . handleErrors
       . runLoggerOnRainbow
-      . runGetConfig configFile
+      . runGetConfigStatic config
       . runWriteConfig configFile
       . runStateCached @Config
       . runInputConst args
@@ -70,11 +71,19 @@ runapp args@Args {..} institution =
 runSync :: (Members '[AppM] r) => Sem r ()
 runSync = syncTransactions
 
-getStaticInstitution :: Args -> IO BankInstitution
-getStaticInstitution args@Args {..} =
+getConfig :: FilePath -> IO Config
+getConfig configFile =
   ( runM
       . runLoggerOnRainbow
       . runGetConfig configFile
+  )
+    (input @Config)
+
+getInstitutionStatic :: Config -> Args -> IO BankInstitution
+getInstitutionStatic config args@Args {..} =
+  ( runM
+      . runLoggerOnRainbow
+      . runGetConfigStatic config
       . runWriteConfig configFile
       . runStateCached @Config
       . runInputConst args
@@ -85,8 +94,9 @@ getStaticInstitution args@Args {..} =
 main :: IO ()
 main = do
   options <- getArgs
-  institution <- getStaticInstitution options
-  result <- runapp options institution
+  config <- getConfig (configFile options)
+  institution <- getInstitutionStatic config options
+  result <- runapp options config institution
   case result of
     Left e -> print e
     Right () -> return ()
