@@ -3,7 +3,7 @@ cradle:
     - path: "./src"
       component: "htransaction:lib"
 
-    - path: "./app/Main.hs"
+    - path: "./app"
       component: "htransaction:exe:htransaction-exe"
 
     - path: "./app/Paths_htransaction.hs"
