@@ -25,7 +25,6 @@ import Polysemy.Error
 import Polysemy.Http
 import Polysemy.Input
 import Polysemy.LastImported
-import Polysemy.OAuth
 import Polysemy.Output
 import Polysemy.State
 import Test.Hspec
@@ -55,29 +54,33 @@ runDbEmpty = interpret $ \case
   DB.FindByUuid _ -> return Nothing
   DB.InsertUnique _ -> return Nothing
 
-runAppEmpty :: Sem '[AppM, BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ())
+runAppEmpty :: ([LogMsg], ())
 runAppEmpty =
-  run
-    . runOutputList @LogMsg
-    . runLoggerAsOutput
-    . runShowTransactionsMEmpty
-    . runTransactionsManagerEmpty
-    . runInputConst testArgs
-    . runGetConfigSimple testConfig
-    . runBankAccountsMOnConfig
-    . runApp
+  ( run
+      . runOutputList @LogMsg
+      . runLoggerAsOutput
+      . runShowTransactionsMEmpty
+      . runTransactionsManagerEmpty
+      . runInputConst testArgs
+      . runGetConfigSimple testConfig
+      . runBankAccountsMOnConfig
+      . runApp
+  )
+    app
 
-runAppSimple :: [Transaction] -> Sem '[AppM, BankAccountsM, State Config, Input Args, TransactionsManager, Output [Transaction], Logger] () -> ([LogMsg], ([[Transaction]], ()))
+runAppSimple :: [Transaction] -> ([LogMsg], ([[Transaction]], ()))
 runAppSimple transactions =
-  run
-    . runOutputList @LogMsg
-    . runLoggerAsOutput
-    . runOutputList @[Transaction]
-    . runTransactionsManagerSimple transactions
-    . runInputConst testArgs
-    . runGetConfigSimple testConfig
-    . runBankAccountsMOnConfig
-    . runApp
+  ( run
+      . runOutputList @LogMsg
+      . runLoggerAsOutput
+      . runOutputList @[Transaction]
+      . runTransactionsManagerSimple transactions
+      . runInputConst testArgs
+      . runGetConfigSimple testConfig
+      . runBankAccountsMOnConfig
+      . runApp
+  )
+    app
 
 testTokenExpiresAt :: Maybe UTCTime
 testTokenExpiresAt = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-09"
@@ -202,68 +205,42 @@ runAppDeep ::
   Config ->
   Args ->
   TokenSet ->
-  Sem
-    '[ AppM,
-       TransactionsManager,
-       TransactionsApiM,
-       MZ.MonzoM,
-       Output [MZ.MonzoTransaction],
-       DB.DbM,
-       FaM,
-       ApiHttpM TransactionsEndpoint,
-       ApiHttpM MZ.MonzoTransactionsEndpoint,
-       HttpM TransactionsEndpoint,
-       HttpM MZ.MonzoTransactionsEndpoint,
-       AccessTokenM,
-       Input UTCTime,
-       State TokenSet,
-       Output [Transaction],
-       Input (Maybe (Maybe [Transaction])),
-       OAuthM,
-       PersistLastImportedM,
-       BankAccountsM,
-       Input Args,
-       State Config,
-       Logger,
-       Error H.HttpException,
-       Error ApiError,
-       Error AppError
-     ]
-    a ->
-  Either AppError ([LogMsg], ([Config], ([[Transaction]], ([TokenSet], ([[MZ.MonzoTransaction]], a)))))
+  Either AppError ([LogMsg], ([Config], ([[Transaction]], ([TokenSet], ([[MZ.MonzoTransaction]], ())))))
 runAppDeep tx config args tokens =
-  run
-    . handleErrors
-    . runOutputList @LogMsg
-    . runLoggerAsOutput
-    . runInputConst config
-    . runOutputList @Config
-    . runStateCached @Config
-    . runInputConst args
-    . runBankAccountsMOnConfig
-    . runPersistLastImportedM
-    . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint authorizationCode
-    . runInputList tx
-    . runOutputList @[Transaction]
-    . runInputConst tokens
-    . runOutputList @TokenSet
-    . runStateCached @TokenSet
-    . runInputConst testCurrentTime
-    . saveTokens
-    . runAccessTokenM
-    . runHttpMTest @MZ.MonzoTransactionsEndpoint monzoTransactionsEndpoint
-    . runHttpMTest @TransactionsEndpoint transactionsEndpoint
-    . runApiHttpMOnTokens @MZ.MonzoTransactionsEndpoint
-    . runApiHttpMOnTokens @TransactionsEndpoint
-    . retryOnUnauthorized @MZ.MonzoTransactionsEndpoint
-    . retryOnUnauthorized @TransactionsEndpoint
-    . runFaM
-    . runDbEmpty
-    . runOutputList @[MZ.MonzoTransaction]
-    . MZ.runMonzoM
-    . runTransactionsApiM
-    . runTransactionsManager
-    . runApp
+  ( run
+      . handleErrors
+      . runOutputList @LogMsg
+      . runLoggerAsOutput
+      . runInputConst config
+      . runOutputList @Config
+      . runStateCached @Config
+      . runInputConst args
+      . runBankAccountsMOnConfig
+      . runPersistLastImportedM
+      . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint authorizationCode
+      . runInputList tx
+      . runOutputList @[Transaction]
+      . runInputConst tokens
+      . runOutputList @TokenSet
+      . runStateCached @TokenSet
+      . runInputConst testCurrentTime
+      . saveTokens
+      . runAccessTokenM
+      . runHttpMTest @MZ.MonzoTransactionsEndpoint monzoTransactionsEndpoint
+      . runHttpMTest @TransactionsEndpoint transactionsEndpoint
+      . runApiHttpMOnTokens @MZ.MonzoTransactionsEndpoint
+      . runApiHttpMOnTokens @TransactionsEndpoint
+      . retryOnUnauthorized @MZ.MonzoTransactionsEndpoint
+      . retryOnUnauthorized @TransactionsEndpoint
+      . runFaM
+      . runDbEmpty
+      . runOutputList @[MZ.MonzoTransaction]
+      . MZ.runMonzoM
+      . runTransactionsApiM
+      . runTransactionsManager
+      . runApp
+  )
+    app
 
 spec :: Spec
 spec = do
@@ -274,42 +251,34 @@ spec = do
       let happyRunner ::
             Config ->
             TokenSet ->
-            Sem
-              '[ AccessTokenM,
-                 Input UTCTime,
-                 State TokenSet,
-                 Input TokenSet,
-                 State Config,
-                 Input Config,
-                 OAuthM
-               ]
-              AccessToken ->
             AccessToken
           happyRunner config tokens =
-            run
-              . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint authorizationCode
-              . runInputConst config
-              . evalState config
-              . runInputConst tokens
-              . evalState tokens
-              . runInputConst testCurrentTime
-              . runAccessTokenM
+            ( run
+                . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint authorizationCode
+                . runInputConst config
+                . evalState config
+                . runInputConst tokens
+                . evalState tokens
+                . runInputConst testCurrentTime
+                . runAccessTokenM
+            )
+              tokenApp
       it "uses the config token if not expired" $
-        happyRunner testConfig testTokens tokenApp `shouldBe` AccessToken ("token")
+        happyRunner testConfig testTokens `shouldBe` AccessToken "token"
       it "uses the refresh token if expired" $
-        happyRunner testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) tokenApp `shouldBe` AccessToken ("accessTokenRefresh")
+        happyRunner testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) `shouldBe` AccessToken "accessTokenRefresh"
       it "uses the access token if tokenExpiresAt is not set" $
-        happyRunner testConfig (testTokens & tokenExpiresAt .~ Nothing) tokenApp `shouldBe` AccessToken ("accessTokenAccess")
+        happyRunner testConfig (testTokens & tokenExpiresAt .~ Nothing) `shouldBe` AccessToken "accessTokenAccess"
       it "uses the access token if token not present in config" $
-        happyRunner testConfig (testTokens & accessToken .~ Nothing) tokenApp `shouldBe` AccessToken ("accessTokenAccess")
+        happyRunner testConfig (testTokens & accessToken .~ Nothing) `shouldBe` AccessToken "accessTokenAccess"
   describe "app" $ do
     context "empty path" $
       it "imports nothing" $
-        runAppEmpty app `shouldBe` ([(Info, "Number of transactions: 0")], ())
+        runAppEmpty `shouldBe` ([(Info, "Number of transactions: 0")], ())
     context "happy, simple path" $
       context "with two transactions" $
         it "imports them" $
-          runAppSimple testTransactions app
+          runAppSimple testTransactions
             `shouldBe` ( [(Info, "Number of transactions: 2")],
                          ( [ testTransactions
                            ],
@@ -328,7 +297,7 @@ spec = do
                   }
               )
       it "imports 100 transaction and produces a warning" $
-        case runAppDeep [Just transactions_100] testConfig testArgs testTokens app of
+        case runAppDeep [Just transactions_100] testConfig testArgs testTokens of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -344,7 +313,7 @@ spec = do
                          )
     context "happy, deep path" $ do
       it "imports transactions, outputs them, updates config" $
-        case runAppDeep [Just testTransactions] testConfig testArgs testTokens app of
+        case runAppDeep [Just testTransactions] testConfig testArgs testTokens of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -362,7 +331,7 @@ spec = do
                            )
                          )
       it "imports 0 transactions" $
-        case runAppDeep [Just []] testConfig testArgs testTokens app of
+        case runAppDeep [Just []] testConfig testArgs testTokens of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             r
@@ -372,7 +341,7 @@ spec = do
                            ([], ([[]], ([], ([], ()))))
                          )
       it "tries to refresh tokens if needed" $
-        case runAppDeep [Just testTransactions] testConfig testArgs (testTokens & tokenExpiresAt .~ expiredTokenTime) app of
+        case runAppDeep [Just testTransactions] testConfig testArgs (testTokens & tokenExpiresAt .~ expiredTokenTime) of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig =
@@ -395,7 +364,7 @@ spec = do
                                )
                              )
       it "retries if unauthorized" $
-        case runAppDeep [Nothing, Just testTransactions] testConfig testArgs testTokens app of
+        case runAppDeep [Nothing, Just testTransactions] testConfig testArgs testTokens of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig =
@@ -428,7 +397,7 @@ spec = do
                                )
                              )
       it "retries if unauthorized for Monzo" $
-        case runAppDeep [Nothing, Just testTransactions] testConfig testArgsMonzo testTokens app of
+        case runAppDeep [Nothing, Just testTransactions] testConfig testArgsMonzo testTokens of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig =
@@ -460,7 +429,7 @@ spec = do
                                )
                              )
       it "only retries once if unauthorized" $
-        case runAppDeep [Nothing, Nothing] testConfig testArgsMonzo testTokens app of
+        case runAppDeep [Nothing, Nothing] testConfig testArgsMonzo testTokens of
           Left (AppApiError (Unauthorized _)) -> return ()
           Left e -> expectationFailure $ "expected Left AppApiError, got Left: " ++ show e
           Right r -> expectationFailure $ "expected Left, got Right: " ++ show r
