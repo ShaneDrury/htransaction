@@ -22,7 +22,7 @@ module Token
   )
 where
 
-import Config (BankInstitution (..))
+import Config (BankAccount, BankInstitution (..))
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
@@ -91,7 +91,7 @@ runGetTime :: (Members '[Embed IO] r) => InterpreterFor (Input UTCTime) r
 runGetTime = interpret $ \case
   Input -> embed getCurrentTime
 
-runGetTokens :: (Members '[Logger, BankAccountsM, Embed IO] r) => FilePath -> InterpreterFor (Input TokenSet) r
+runGetTokens :: (Members '[Logger, Input BankAccount, Embed IO] r) => FilePath -> InterpreterFor (Input TokenSet) r
 runGetTokens fp = interpret $ \case
   Input -> do
     info $ "Loading tokens from " ++ fp

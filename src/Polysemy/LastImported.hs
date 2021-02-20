@@ -15,6 +15,7 @@ import Data.Time
 import Logger
 import Polysemy
 import Polysemy.BankAccount
+import Polysemy.Input
 import Polysemy.Output
 import Polysemy.State
 import Types
@@ -25,12 +26,12 @@ data PersistLastImportedM m a where
 
 $(makeSem ''PersistLastImportedM)
 
-runPersistLastImportedM :: (Members '[BankAccountsM, State Config, Logger] r) => InterpreterFor PersistLastImportedM r
+runPersistLastImportedM :: (Members '[Input BankAccount, State Config, Logger] r) => InterpreterFor PersistLastImportedM r
 runPersistLastImportedM = interpret $ \case
   PersistLastImported day -> do
-    bankAccount <- getBankAccount
+    bankAccount <- input
+    (LastImported originalDay) <- getLastImported
     originalConfig <- get @Config
-    let (LastImported originalDay) = bankAccount ^. lastImported
     when (day /= originalDay) $ do
       info $ "Outputting last imported day of " ++ show day
       put (updateConfig (bankAccount ^. bankAccountId) (LastImported day) originalConfig)

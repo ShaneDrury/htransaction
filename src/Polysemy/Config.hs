@@ -37,7 +37,7 @@ runGetConfigStatic :: Config -> InterpreterFor (Input Config) r
 runGetConfigStatic cfg = interpret $ \case
   Input -> return cfg
 
-runWriteTokens :: (Members '[Logger, Embed IO, BankAccountsM] r) => FilePath -> InterpreterFor (Output TokenSet) r
+runWriteTokens :: (Members '[Logger, Embed IO, Input BankAccount] r) => FilePath -> InterpreterFor (Output TokenSet) r
 runWriteTokens fp = interpret $ \case
   Output cfg -> do
     info $ "Writing tokens to " ++ fp
