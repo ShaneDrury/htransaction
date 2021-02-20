@@ -21,7 +21,6 @@ import Polysemy.Config
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Random
-import Polysemy.State
 import Token
 import Transaction
 import Types
@@ -80,20 +79,11 @@ getConfig configFile =
   )
     (input @Config)
 
-getInstitutionStatic :: Config -> Args -> IO BankInstitution
-getInstitutionStatic config args =
-  ( runM
-      . evalState config
-      . runInputConst args
-      . runBankAccountsMOnConfig
-  )
-    getInstitution
-
 main :: IO ()
 main = do
   options <- getArgs
   config <- getConfig (configFile options)
-  institution <- getInstitutionStatic config options
+  let institution = getInstitutionStatic config options
   result <- runapp options config institution
   case result of
     Left e -> print e
