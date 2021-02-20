@@ -21,6 +21,7 @@ import Polysemy.Config
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Random
+import Polysemy.State
 import Token
 import Transaction
 import Types
@@ -80,12 +81,9 @@ getConfig configFile =
     (input @Config)
 
 getInstitutionStatic :: Config -> Args -> IO BankInstitution
-getInstitutionStatic config args@Args {..} =
+getInstitutionStatic config args =
   ( runM
-      . runLoggerOnRainbow
-      . runGetConfigStatic config
-      . runWriteConfig configFile
-      . runStateCached @Config
+      . evalState config
       . runInputConst args
       . runBankAccountsMOnConfig
   )
