@@ -9,7 +9,7 @@ module App
 where
 
 import Config
-import qualified Db as DB
+import Db
 import Logger
 import Polysemy
 import Polysemy.BankAccount
@@ -30,7 +30,7 @@ runWithDb fp = intercept @AppM $ \case
     case institution of
       Fa -> syncTransactions
       Monzo -> do
-        DB.runMigrations fp
+        runMigrations fp
         syncTransactions
 
 runApp :: (Members '[Input BankAccount, TransactionsManager, Output [Transaction], Logger] r) => InterpreterFor AppM r

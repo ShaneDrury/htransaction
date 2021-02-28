@@ -11,12 +11,11 @@ module Fa
   )
 where
 
-import Config
-import Control.Lens
 import Control.Monad
 import Data.Aeson
 import Data.Text hiding (length)
 import Data.Time
+import Db
 import GHC.Generics
 import Logger
 import Network.HTTP.Req
@@ -74,7 +73,7 @@ runFaM = interpret $ \case
     etx <-
       runFaRequest
         "bank_transactions"
-        ( "bank_account" =: bankAccount ^. bankAccountId
+        ( "bank_account" =: Db.bankAccountReference bankAccount
             <> "from_date" =: fromDate
             <> "sort" =: ("dated_on" :: Text)
             <> "per_page" =: (100 :: Int)

@@ -6,7 +6,7 @@ where
 import Api
 import App
 import Cli
-import Config hiding (bankAccountId)
+import Config
 import Control.Monad
 import qualified Db as DB
 import Fa
@@ -28,18 +28,15 @@ import Prelude
 
 runapp ::
   Args ->
-  Config ->
   BankInstitution ->
   IO (Either AppError ())
-runapp args@Args {..} config institution =
+runapp args@Args {..} institution =
   ( runM
       . handleErrors
       . runLoggerOnRainbow
-      . runGetConfigStatic config
-      . runWriteConfig configFile
-      . runStateCached @Config
       . runInputConst args
-      . runBankAccountsMOnConfig
+      . DB.runDbMOnSqlite dbFile
+      . runBankAccountsMOnDb
       . runGetTokens tokensFile -- Input TokenSet
       . runWriteTokens tokensFile
       . runStateCached @TokenSet
@@ -55,7 +52,6 @@ runapp args@Args {..} config institution =
       . runApiHttpMOnTokens @MonzoTransactionsEndpoint
       . runApiHttpMOnTokens @TransactionsEndpoint
       . runFaM
-      . DB.runDbMOnSqlite dbFile
       . outputMonzoOnDb
       . runMonzoM
       . retryOnUnauthorized @MonzoTransactionsEndpoint
@@ -71,20 +67,20 @@ runapp args@Args {..} config institution =
 runSync :: (Members '[AppM] r) => Sem r ()
 runSync = syncTransactions
 
-getConfig :: FilePath -> IO Config
-getConfig configFile =
+getInstitutionStatic :: Args -> IO BankInstitution
+getInstitutionStatic args@Args {..} =
   ( runM
-      . runLoggerOnRainbow
-      . runGetConfig configFile
+      . runInputConst args
+      . DB.runDbMOnSqlite dbFile
+      . runBankAccountsMOnDb
   )
-    (input @Config)
+    getInstitution
 
 main :: IO ()
 main = do
   options <- getArgs
-  config <- getConfig (configFile options)
-  let institution = getInstitutionStatic config options
-  result <- runapp options config institution
+  institution <- getInstitutionStatic options
+  result <- runapp options institution
   case result of
     Left e -> print e
     Right () -> return ()

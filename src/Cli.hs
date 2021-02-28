@@ -10,7 +10,6 @@ import Prelude
 
 data Args = Args
   { outfile :: FilePath,
-    configFile :: FilePath,
     tokensFile :: FilePath,
     verbose :: Bool,
     bankAccountId :: String,

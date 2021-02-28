@@ -13,8 +13,6 @@ module Transaction
 where
 
 import Api
-import Config
-import Control.Lens
 import Control.Monad
 import qualified Data.ByteString.Lazy.Char8 as S
 import Data.Coerce
@@ -22,6 +20,7 @@ import qualified Data.Csv as CSV
 import Data.List
 import Data.Ord
 import Data.Time
+import Db
 import Logger
 import Polysemy
 import Polysemy.LastImported
@@ -45,7 +44,7 @@ runTransactionsManager ::
   InterpreterFor TransactionsManager r
 runTransactionsManager = interpret $ \case
   GetNewTransactions bankAccount -> do
-    let (LastImported day) = bankAccount ^. lastImported
+    let (LastImported day) = bankAccountLastImported bankAccount
     info $ "Getting transactions after " ++ show day
     tx <- getTransactionsApi bankAccount day
     unless (null tx) (persistLastImported (latestTransaction tx))

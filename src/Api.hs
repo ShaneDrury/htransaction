@@ -8,24 +8,27 @@ module Api
 where
 
 import Config
-import Control.Lens
 import Data.Time
 import qualified Db as DB
 import Fa
 import Logger
 import Monzo
 import Polysemy
+import Polysemy.BankAccount
 import Polysemy.Error
+import Polysemy.Input
 import Types
 import Prelude hiding (id, null)
 
 data TransactionsApiM m a where
-  GetTransactionsApi :: BankAccount -> Day -> TransactionsApiM m [Transaction]
+  GetTransactionsApi :: DB.BankAccount -> Day -> TransactionsApiM m [Transaction]
 
 $(makeSem ''TransactionsApiM)
 
-runTransactionsApiM :: (Members '[FaM, MonzoM, Error ApiError, Logger, DB.DbM] r) => InterpreterFor TransactionsApiM r
+runTransactionsApiM :: (Members '[FaM, MonzoM, Error ApiError, Logger, Input DB.BankAccount] r) => InterpreterFor TransactionsApiM r
 runTransactionsApiM = interpret $ \case
-  GetTransactionsApi bankAccount fromDate -> case bankAccount ^. bankInstitution of
-    Fa -> getFaTransactions bankAccount fromDate
-    Monzo -> getMonzoTransactions bankAccount fromDate
+  GetTransactionsApi bankAccount fromDate -> do
+    institution <- getInstitution
+    case institution of
+      Fa -> getFaTransactions bankAccount fromDate
+      Monzo -> getMonzoTransactions bankAccount fromDate

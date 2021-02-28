@@ -22,13 +22,14 @@ module Token
   )
 where
 
-import Config (BankAccount, BankInstitution (..))
+import Config
 import Control.Lens
 import Data.Aeson
 import Data.Aeson.TH
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Time
+import Db
 import GHC.Generics
 import Logger
 import Polysemy

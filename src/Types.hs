@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Types
   ( LastImported (..),
     handleErrors,
@@ -18,6 +20,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.Csv as CSV
 import Data.Text
 import Data.Time
+import Database.Persist.TH
 import GHC.Generics
 import qualified Network.HTTP.Req as H
 import Polysemy
@@ -25,8 +28,10 @@ import Polysemy.Error
 import Prelude hiding (log)
 
 newtype LastImported = LastImported Day
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Show, Read, Generic)
   deriving anyclass (FromJSON, ToJSON)
+
+derivePersistField "LastImported"
 
 newtype ApiError = Unauthorized H.HttpException deriving stock (Show)
 

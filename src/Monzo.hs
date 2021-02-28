@@ -16,7 +16,6 @@ module Monzo
   )
 where
 
-import Config
 import Control.Lens
 import Control.Monad
 import Data.Aeson
@@ -35,7 +34,7 @@ import Types
 import Prelude hiding (id, null)
 
 data MonzoM m a where
-  GetMonzoTransactions :: BankAccount -> Day -> MonzoM m [Transaction]
+  GetMonzoTransactions :: DB.BankAccount -> Day -> MonzoM m [Transaction]
 
 $(makeSem ''MonzoM)
 
@@ -129,7 +128,7 @@ runMonzoM = interpret $ \case
     etxs <-
       runMonzoRequest
         "transactions"
-        ( "account_id" =: bankAccount ^. bankAccountId
+        ( "account_id" =: DB.bankAccountReference bankAccount
             <> "since" =: fromDate
             <> "expand[]" =: ("merchant" :: Text)
         )
