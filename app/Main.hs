@@ -60,7 +60,6 @@ runapp args@Args {..} institution =
       . runTransactionsApiM
       . runTransactionsManager
       . runApp
-      . runWithDb dbFile
   )
     runSync
 
@@ -79,6 +78,7 @@ getInstitutionStatic args@Args {..} =
 main :: IO ()
 main = do
   options <- getArgs
+  runM (DB.runMigrations (dbFile options))
   institution <- getInstitutionStatic options
   result <- runapp options institution
   case result of
