@@ -6,8 +6,5 @@ cradle:
     - path: "./app"
       component: "htransaction:exe:htransaction-exe"
 
-    - path: "./app/Paths_htransaction.hs"
-      component: "htransaction:exe:htransaction-exe"
-
     - path: "./test"
       component: "htransaction:test:htransaction-test"

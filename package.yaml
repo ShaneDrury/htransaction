@@ -80,6 +80,9 @@ library:
     - GeneralizedNewtypeDeriving
     - DeriveGeneric
     - DeriveFunctor
+  when:
+  - condition: false
+    other-modules: Paths_htransaction
 executables:
   htransaction-exe:
     main:                Main.hs
@@ -120,6 +123,9 @@ executables:
     - GeneralizedNewtypeDeriving
     - DeriveGeneric
     - DeriveFunctor
+    when:
+    - condition: false
+      other-modules: Paths_htransaction
 tests:
   htransaction-test:
     main:                Spec.hs
@@ -142,7 +148,6 @@ tests:
     - -Werror
     dependencies:
     - htransaction
-
     default-extensions:
     - DataKinds
     - FlexibleContexts
@@ -161,3 +166,6 @@ tests:
     - GeneralizedNewtypeDeriving
     - DeriveGeneric
     - DeriveFunctor
+    when:
+    - condition: false
+      other-modules: Paths_htransaction
