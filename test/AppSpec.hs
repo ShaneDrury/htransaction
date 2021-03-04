@@ -194,10 +194,10 @@ runHttpMTest convert =
     )
 
 testArgs :: Args
-testArgs = Args {Cli.bankAccountId = "1", outfile = "", tokensFile = "", verbose = True, dbFile = ""}
+testArgs = Args {Cli.bankAccountId = "1", outfile = "", verbose = True, dbFile = ""}
 
 testArgsMonzo :: Args
-testArgsMonzo = Args {Cli.bankAccountId = "2", outfile = "", tokensFile = "", verbose = True, dbFile = ""}
+testArgsMonzo = Args {Cli.bankAccountId = "2", outfile = "", verbose = True, dbFile = ""}
 
 runAppDeep ::
   [Maybe [Transaction]] ->
