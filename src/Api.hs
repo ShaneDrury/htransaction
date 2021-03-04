@@ -7,7 +7,6 @@ module Api
   )
 where
 
-import Config
 import Data.Time
 import qualified Db as DB
 import Fa

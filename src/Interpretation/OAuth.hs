@@ -8,9 +8,8 @@ module Interpretation.OAuth
   )
 where
 
-import Config
-import Control.Lens
 import Data.Text
+import Db
 import Fa
 import Logger
 import Monzo
@@ -18,10 +17,9 @@ import Network.HTTP.Req
 import Polysemy
 import Polysemy.Error
 import Polysemy.Http
+import Polysemy.Input
 import Polysemy.OAuth
 import Polysemy.Random
-import Polysemy.State
-import Token
 import Types
 import Prelude
 
@@ -31,7 +29,7 @@ runApiTokenMConst refresh access authcode = interpret $ \case
   ExchangeAuthCode _ -> return access
   GetAuthCode -> return authcode
 
-refreshTokenRequest :: (Members '[HttpM TokenEndpoint] r) => Url 'Https -> String -> String -> RefreshToken -> Sem r (Either ApiError TokenEndpoint)
+refreshTokenRequest :: (Members '[HttpM TokenEndpoint] r) => Url 'Https -> Text -> Text -> RefreshToken -> Sem r (Either ApiError TokenEndpoint)
 refreshTokenRequest endpoint cID secret (RefreshToken refresh) =
   runRequest
     endpoint
@@ -44,7 +42,7 @@ refreshTokenRequest endpoint cID secret (RefreshToken refresh) =
     )
     mempty
 
-accessTokenRequest :: (Members '[HttpM TokenEndpoint] r) => Url 'Https -> String -> String -> AuthorizationCode -> Sem r (Either ApiError TokenEndpoint)
+accessTokenRequest :: (Members '[HttpM TokenEndpoint] r) => Url 'Https -> Text -> Text -> AuthorizationCode -> Sem r (Either ApiError TokenEndpoint)
 accessTokenRequest endpoint cID secret (AuthorizationCode authorizationCode) =
   runRequest
     endpoint
@@ -63,7 +61,7 @@ runOAuthMOnFa ::
   ( Members
       '[ Error ApiError,
          Logger,
-         State TokenSet,
+         Input Client,
          HttpM TokenEndpoint,
          Embed IO
        ]
@@ -73,28 +71,28 @@ runOAuthMOnFa ::
 runOAuthMOnFa = interpret $ \case
   ExchangeAuthCode authCode -> do
     warn "Exchanging auth code"
-    config <- get @TokenSet
-    r <- accessTokenRequest faAuthEndpoint (config ^. clientID) (config ^. clientSecret) authCode
+    config <- input @Client
+    r <- accessTokenRequest faAuthEndpoint (clientIdentifier config) (clientSecret config) authCode
     case r of
       Right rr -> return rr
       Left e -> throw e
   ExchangeRefreshToken tkn -> do
     warn "Trying to refresh tokens"
-    config <- get @TokenSet
-    r <- refreshTokenRequest faAuthEndpoint (config ^. clientID) (config ^. clientSecret) tkn
+    config <- input @Client
+    r <- refreshTokenRequest faAuthEndpoint (clientIdentifier config) (clientSecret config) tkn
     case r of
       Right rr -> return rr
       Left e -> throw e
   GetAuthCode -> do
-    config <- get @TokenSet
-    embed $ putStrLn $ "Open and copy code: " <> faAuthorizationUrl (config ^. clientID)
+    config <- input @Client
+    embed $ putStrLn $ unpack $ "Open and copy code: " <> faAuthorizationUrl (clientIdentifier config)
     AuthorizationCode <$> embed getLine
 
 runOAuthMOnMonzo ::
   ( Members
       '[ Error ApiError,
          Logger,
-         State TokenSet,
+         Input Client,
          HttpM TokenEndpoint,
          Embed IO,
          RandomM
@@ -105,23 +103,23 @@ runOAuthMOnMonzo ::
 runOAuthMOnMonzo = interpret $ \case
   ExchangeAuthCode authCode -> do
     warn "Exchanging auth code"
-    config <- get @TokenSet
-    r <- accessTokenRequest monzoAuthEndpoint (config ^. clientID) (config ^. clientSecret) authCode
+    config <- input @Client
+    r <- accessTokenRequest monzoAuthEndpoint (clientIdentifier config) (clientSecret config) authCode
     case r of
       Right rr -> return rr
       Left e -> throw e
   ExchangeRefreshToken tkn -> do
     warn "Trying to refresh tokens"
-    config <- get @TokenSet
-    r <- refreshTokenRequest monzoAuthEndpoint (config ^. clientID) (config ^. clientSecret) tkn
+    config <- input @Client
+    r <- refreshTokenRequest monzoAuthEndpoint (clientIdentifier config) (clientSecret config) tkn
     case r of
       Right rr -> return rr
       Left e -> throw e
   GetAuthCode -> do
-    config <- get @TokenSet
+    config <- input @Client
     state <- randomString 30
-    embed $ putStrLn $ "Open and copy code: " <> monzoAuthUrl (config ^. clientID) state
+    embed $ putStrLn $ unpack $ "Open and copy code: " <> monzoAuthUrl (clientIdentifier config) state
     AuthorizationCode <$> embed getLine
 
-runOAuthMOnInstitution :: (Members '[State TokenSet, Error ApiError, HttpM TokenEndpoint, Embed IO, Logger, RandomM] r) => BankInstitution -> InterpreterFor OAuthM r
+runOAuthMOnInstitution :: (Members '[Input Client, Error ApiError, HttpM TokenEndpoint, Embed IO, Logger, RandomM] r) => BankInstitution -> InterpreterFor OAuthM r
 runOAuthMOnInstitution institution = case institution of Fa -> runOAuthMOnFa; Monzo -> runOAuthMOnMonzo

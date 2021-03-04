@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Types
@@ -12,6 +13,7 @@ module Types
     RefreshToken (..),
     AuthorizationCode (..),
     TokenEndpoint (..),
+    BankInstitution (..),
   )
 where
 
@@ -20,6 +22,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.Csv as CSV
 import Data.Text
 import Data.Time
+import Database.Esqueleto
 import Database.Persist.TH
 import GHC.Generics
 import qualified Network.HTTP.Req as H
@@ -35,7 +38,7 @@ derivePersistField "LastImported"
 
 newtype ApiError = Unauthorized H.HttpException deriving stock (Show)
 
-data InvalidTokenReason = Expired | Missing deriving stock (Eq, Show)
+data InvalidTokenReason = Expired deriving stock (Eq, Show)
 
 data AppError
   = HttpError H.HttpException
@@ -67,10 +70,12 @@ data Transaction = Transaction
 newtype AccessToken = AccessToken Text
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON)
+  deriving (PersistField, PersistFieldSql) via Text
 
 newtype RefreshToken = RefreshToken Text
   deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON)
+  deriving (PersistField, PersistFieldSql) via Text
 
 newtype AuthorizationCode = AuthorizationCode String deriving stock (Eq, Show)
 
@@ -84,3 +89,15 @@ data TokenEndpoint = TokenEndpoint
   deriving stock (Eq, Show)
   deriving anyclass (FromJSON)
   deriving stock (Generic)
+
+data BankInstitution = Fa | Monzo
+  deriving stock (Eq, Show, Generic, Ord, Read)
+  deriving anyclass (FromJSON, ToJSON)
+
+derivePersistField "BankInstitution"
+
+instance ToJSONKey BankInstitution where
+  toJSONKey = genericToJSONKey defaultJSONKeyOptions
+
+instance FromJSONKey BankInstitution where
+  fromJSONKey = genericFromJSONKey defaultJSONKeyOptions

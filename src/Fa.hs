@@ -86,5 +86,5 @@ runFaM = interpret $ \case
           tx = bank_transactions endpoint
       Left e -> throw e
 
-faAuthorizationUrl :: String -> String
+faAuthorizationUrl :: Text -> Text
 faAuthorizationUrl clientId = "https://api.freeagent.com/v2/approve_app?client_id=" <> clientId <> "&response_type=code&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground"

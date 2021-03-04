@@ -6,7 +6,6 @@ where
 import Api
 import App
 import Cli
-import Config
 import Control.Monad
 import qualified Db as DB
 import Fa
@@ -17,7 +16,6 @@ import Monzo
 import Polysemy
 import Polysemy.BankAccount
 import Polysemy.Cached
-import Polysemy.Config
 import Polysemy.Input
 import Polysemy.LastImported
 import Polysemy.Random
@@ -37,15 +35,16 @@ runapp args@Args {..} institution =
       . runInputConst args
       . DB.runDbMOnSqlite dbFile
       . runBankAccountsMOnDb
-      . runGetTokens tokensFile -- Input TokenSet
-      . runWriteTokens tokensFile
-      . runStateCached @TokenSet
+      . runGetTime
+      . runGetTokens
+      . runWriteTokens
+      . runStateCached @(Maybe DB.TokenSet)
       . runPersistLastImportedM
       . runRandomROnIO
-      . runGetTime
       . runHttpMOnReq @TokenEndpoint
       . runHttpMOnReq @MonzoTransactionsEndpoint
       . runHttpMOnReq @TransactionsEndpoint
+      . runInputClientOnDb
       . runOAuthMOnInstitution institution
       . saveTokens
       . runAccessTokenM

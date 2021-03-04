@@ -162,6 +162,6 @@ maybeBool2Bool = fromMaybe False
 excludeDeclinedTransactions :: [MonzoTransaction] -> [MonzoTransaction]
 excludeDeclinedTransactions = filter (\tx -> not $ maybeBool2Bool (Data.Text.null <$> declined_reason tx))
 
-monzoAuthUrl :: String -> String -> String
+monzoAuthUrl :: Text -> String -> Text
 monzoAuthUrl clientId state =
-  "https://auth.monzo.com/?client_id=" <> clientId <> "&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground&response_type=code&state=" <> state
+  "https://auth.monzo.com/?client_id=" <> clientId <> "&redirect_uri=https%3A%2F%2Fdevelopers.google.com%2Foauthplayground&response_type=code&state=" <> pack state

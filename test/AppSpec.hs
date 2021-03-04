@@ -6,11 +6,9 @@ where
 import Api
 import App (AppM (..), runApp, syncTransactions)
 import Cli
-import Config
-import Control.Lens
 import Data.Maybe (fromJust)
 import Data.Time
-import qualified Db as DB
+import Db
 import Fa
 import Interpretation.Http
 import Interpretation.OAuth
@@ -19,7 +17,6 @@ import qualified Monzo as MZ
 import qualified Network.HTTP.Req as H
 import Polysemy
 import Polysemy.Cached
-import Polysemy.Config
 import Polysemy.Error
 import Polysemy.Http
 import Polysemy.Input
@@ -43,12 +40,15 @@ runTransactionsManagerSimple :: [Transaction] -> InterpreterFor TransactionsMana
 runTransactionsManagerSimple txs = interpret $ \case
   GetNewTransactions _ -> return txs
 
-runDbEmpty :: InterpreterFor DB.DbM r
+runDbEmpty :: InterpreterFor DbM r
 runDbEmpty = interpret $ \case
-  DB.FindByUuid _ -> return Nothing
-  DB.InsertUnique _ -> return Nothing
-  DB.GetAccount _ -> return Nothing
-  DB.UpdateLastImported _ _ -> return ()
+  FindByUuid _ -> return Nothing
+  InsertUnique _ -> return Nothing
+  GetAccount _ -> return Nothing
+  UpdateLastImported _ _ -> return ()
+  GetTokensByInstitution _ -> return Nothing
+  UpdateTokens _ _ -> return ()
+  GetClient _ -> return Nothing
 
 runAppEmpty :: ([LogMsg], ())
 runAppEmpty =
@@ -76,29 +76,34 @@ runAppSimple transactions =
   )
     app
 
-testTokenExpiresAt :: Maybe UTCTime
-testTokenExpiresAt = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-09"
+testTokenExpiresAt :: UTCTime
+testTokenExpiresAt = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-09"
 
-expiredTokenTime :: Maybe UTCTime
-expiredTokenTime = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-01"
+expiredTokenTime :: UTCTime
+expiredTokenTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-01"
 
 testCurrentTime :: UTCTime
 testCurrentTime = fromJust $ parseTimeM True defaultTimeLocale "%Y-%-m-%-d" "2020-3-04"
 
-testConfig :: DB.BankAccount
-testConfig = DB.BankAccount {DB.bankAccountReference = "1", DB.bankAccountLastImported = LastImported $ fromGregorian 2020 4 19, DB.bankAccountInstitution = Fa}
+testConfig :: BankAccount
+testConfig = BankAccount {bankAccountReference = "1", bankAccountLastImported = LastImported $ fromGregorian 2020 4 19, bankAccountInstitution = Fa}
 
-testConfigMonzo :: DB.BankAccount
-testConfigMonzo = DB.BankAccount {DB.bankAccountReference = "2", DB.bankAccountLastImported = LastImported $ fromGregorian 2020 4 19, DB.bankAccountInstitution = Monzo}
+testConfigMonzo :: BankAccount
+testConfigMonzo = BankAccount {bankAccountReference = "2", bankAccountLastImported = LastImported $ fromGregorian 2020 4 19, bankAccountInstitution = Monzo}
 
 testTokens :: TokenSet
 testTokens =
   TokenSet
-    { _accessToken = Just (AccessToken "token"),
-      _refreshToken = Just (RefreshToken "refreshToken"),
-      _clientID = "clientID",
-      _clientSecret = "secret",
-      _tokenExpiresAt = testTokenExpiresAt
+    { tokenSetAccessToken = (AccessToken "token"),
+      tokenSetRefreshToken = (RefreshToken "refreshToken"),
+      tokenSetExpiresAt = testTokenExpiresAt,
+      tokenSetInstitution = Fa
+    }
+
+testTokensMonzo :: TokenSet
+testTokensMonzo =
+  testTokens
+    { tokenSetInstitution = Monzo
     }
 
 refreshTokenEndpoint :: TokenEndpoint
@@ -196,24 +201,25 @@ testArgsMonzo = Args {Cli.bankAccountId = "2", outfile = "", tokensFile = "", ve
 
 runAppDeep ::
   [Maybe [Transaction]] ->
-  DB.BankAccount ->
+  BankAccount ->
   Args ->
   TokenSet ->
-  Either AppError ([LogMsg], ([LastImported], ([[Transaction]], ([TokenSet], ([[MZ.MonzoTransaction]], ())))))
+  Either AppError ([LogMsg], ([LastImported], ([[Transaction]], ([Maybe TokenSet], ([[MZ.MonzoTransaction]], ())))))
 runAppDeep tx bankaccount args tokens =
   ( run
       . handleErrors
       . runOutputList @LogMsg
       . runLoggerAsOutput
       . runInputConst args
+      . runInputConst bankaccount
       . runPersistLastImportedMList
       . runApiTokenMConst refreshTokenEndpoint accessTokenEndpoint authorizationCode
       . runInputList tx
       . runOutputList @[Transaction]
-      . runInputConst tokens
-      . runOutputList @TokenSet
-      . runStateCached @TokenSet
       . runInputConst testCurrentTime
+      . runInputConst @(Maybe TokenSet) (Just tokens)
+      . runOutputList @(Maybe TokenSet)
+      . runStateCached @(Maybe TokenSet)
       . saveTokens
       . runAccessTokenM
       . runHttpMTest @MZ.MonzoTransactionsEndpoint monzoTransactionsEndpoint
@@ -226,7 +232,6 @@ runAppDeep tx bankaccount args tokens =
       . runDbEmpty
       . runOutputList @[MZ.MonzoTransaction]
       . MZ.runMonzoM
-      . runInputConst bankaccount
       . runTransactionsApiM
       . runTransactionsManager
       . runApp
@@ -240,8 +245,8 @@ spec = do
         tokenApp = getAccessToken
     context "happy path" $ do
       let happyRunner ::
-            DB.BankAccount ->
-            TokenSet ->
+            BankAccount ->
+            Maybe TokenSet ->
             AccessToken
           happyRunner ba tokens =
             ( run
@@ -254,13 +259,11 @@ spec = do
             )
               tokenApp
       it "uses the config token if not expired" $
-        happyRunner testConfig testTokens `shouldBe` AccessToken "token"
+        happyRunner testConfig (Just testTokens) `shouldBe` AccessToken "token"
       it "uses the refresh token if expired" $
-        happyRunner testConfig (testTokens & tokenExpiresAt .~ expiredTokenTime) `shouldBe` AccessToken "accessTokenRefresh"
-      it "uses the access token if tokenExpiresAt is not set" $
-        happyRunner testConfig (testTokens & tokenExpiresAt .~ Nothing) `shouldBe` AccessToken "accessTokenAccess"
+        happyRunner testConfig (Just $ testTokens {tokenSetExpiresAt = expiredTokenTime}) `shouldBe` AccessToken "accessTokenRefresh"
       it "uses the access token if token not present in config" $
-        happyRunner testConfig (testTokens & accessToken .~ Nothing) `shouldBe` AccessToken "accessTokenAccess"
+        happyRunner testConfig (Nothing) `shouldBe` AccessToken "accessTokenAccess"
   describe "app" $ do
     context "empty path" $
       it "imports nothing" $
@@ -330,14 +333,15 @@ spec = do
                            ([], ([[]], ([], ([], ()))))
                          )
       it "tries to refresh tokens if needed" $
-        case runAppDeep [Just testTransactions] testConfig testArgs (testTokens & tokenExpiresAt .~ expiredTokenTime) of
+        case runAppDeep [Just testTransactions] testConfig testArgs (testTokens {tokenSetExpiresAt = expiredTokenTime}) of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig =
-                  testTokens &~ do
-                    accessToken .= Just (AccessToken "accessTokenRefresh")
-                    refreshToken .= Just (RefreshToken "refreshTokenRefresh")
-                    tokenExpiresAt .= Just (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
+                  testTokens
+                    { tokenSetAccessToken = (AccessToken "accessTokenRefresh"),
+                      tokenSetRefreshToken = (RefreshToken "refreshTokenRefresh"),
+                      tokenSetExpiresAt = (addUTCTime (86400 :: NominalDiffTime) testCurrentTime)
+                    }
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (Info, "Number of transactions: 2")
@@ -345,7 +349,7 @@ spec = do
                                ( [LastImported $ fromGregorian 2020 4 21],
                                  ( [ testTransactions
                                    ],
-                                   ([updatedTokenConfig], ([], ()))
+                                   ([Just updatedTokenConfig], ([], ()))
                                  )
                                )
                              )
@@ -354,16 +358,16 @@ spec = do
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig =
-                  testTokens &~ do
-                    accessToken .= Just (AccessToken "accessTokenRefresh")
-                    refreshToken .= Just (RefreshToken "refreshTokenRefresh")
-                    tokenExpiresAt
-                      .= Just
+                  testTokens
+                    { tokenSetAccessToken = (AccessToken "accessTokenRefresh"),
+                      tokenSetRefreshToken = (RefreshToken "refreshTokenRefresh"),
+                      tokenSetExpiresAt =
                         ( addUTCTime
                             ( 86400 :: NominalDiffTime
                             )
                             testCurrentTime
                         )
+                    }
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),
@@ -372,7 +376,7 @@ spec = do
                                ( [LastImported $ fromGregorian 2020 4 21],
                                  ( [ testTransactions
                                    ],
-                                   ( [ updatedTokenConfig
+                                   ( [ Just updatedTokenConfig
                                      ],
                                      ([], ())
                                    )
@@ -380,20 +384,20 @@ spec = do
                                )
                              )
       it "retries if unauthorized for Monzo" $
-        case runAppDeep [Nothing, Just testTransactions] testConfigMonzo testArgsMonzo testTokens of
+        case runAppDeep [Nothing, Just testTransactions] testConfigMonzo testArgsMonzo testTokensMonzo of
           Left e -> expectationFailure $ "expected Right, got Left: " ++ show e
           Right r ->
             let updatedTokenConfig =
-                  testTokens &~ do
-                    accessToken .= Just (AccessToken "accessTokenRefresh")
-                    refreshToken .= Just (RefreshToken "refreshTokenRefresh")
-                    tokenExpiresAt
-                      .= Just
+                  testTokensMonzo
+                    { tokenSetAccessToken = (AccessToken "accessTokenRefresh"),
+                      tokenSetRefreshToken = (RefreshToken "refreshTokenRefresh"),
+                      tokenSetExpiresAt =
                         ( addUTCTime
                             ( 86400 :: NominalDiffTime
                             )
                             testCurrentTime
                         )
+                    }
              in r
                   `shouldBe` ( [ (Info, "Getting transactions after 2020-04-19"),
                                  (LogError, "Unauthorized"),
@@ -401,7 +405,7 @@ spec = do
                                ],
                                ( [LastImported $ fromGregorian 2020 4 20],
                                  ( [[Transaction {dated_on = TransactionDate $ fromGregorian 2020 4 20, description = "merchant_name", amount = "123.0", comment = Just "Foo"}, Transaction {dated_on = TransactionDate $ fromGregorian 2020 4 20, description = "merchant_name", amount = "123.0", comment = Just "Foo"}]],
-                                   ( [ updatedTokenConfig
+                                   ( [ Just updatedTokenConfig
                                      ],
                                      ([tx2monzo <$> testTransactions], ())
                                    )
