@@ -59,32 +59,33 @@ runGetTokens = interpret $ \case
     institution <- getInstitution
     getTokensByInstitution institution
 
+exchangeAuthCode_ :: Members '[OAuthM] r => Sem r AccessToken
+exchangeAuthCode_ = do
+  authCode <- getAuthCode
+  endpoint <- exchangeAuthCode authCode
+  return $ access_token endpoint
+
+refreshToken_ :: Members '[OAuthM] r => RefreshToken -> Sem r AccessToken
+refreshToken_ refreshToken = do
+  endpoint <- exchangeRefreshToken refreshToken
+  return $ access_token endpoint
+
 runAccessTokenM :: Members '[Input UTCTime, State (Maybe TokenSet), OAuthM] r => InterpreterFor AccessTokenM r
 runAccessTokenM = interpret $ \case
   GetAccessToken -> do
     mtokenSet <- get @(Maybe TokenSet)
-    currentTime <- input @UTCTime
     case mtokenSet of
-      Nothing -> do
-        authCode <- getAuthCode
-        endpoint <- exchangeAuthCode authCode
-        return $ access_token endpoint
-      Just tokenSet ->
+      Nothing -> exchangeAuthCode_
+      Just tokenSet -> do
+        currentTime <- input @UTCTime
         case getAccessToken' tokenSet currentTime of
-          Left Expired -> do
-            endpoint <- exchangeRefreshToken (tokenSetRefreshToken tokenSet)
-            return $ access_token endpoint
+          Left Expired -> refreshToken_ (tokenSetRefreshToken tokenSet)
           Right tkn -> return tkn
   RefreshAccessToken -> do
     mtokenSet <- get @(Maybe TokenSet)
     case mtokenSet of
-      Nothing -> do
-        authCode <- getAuthCode
-        endpoint <- exchangeAuthCode authCode
-        return $ access_token endpoint
-      Just tokenSet -> do
-        endpoint <- exchangeRefreshToken (tokenSetRefreshToken tokenSet)
-        return $ access_token endpoint
+      Nothing -> exchangeAuthCode_
+      Just tokenSet -> refreshToken_ (tokenSetRefreshToken tokenSet)
 
 runWriteTokens :: (Members '[Logger, DbM, Input BankAccount] r) => InterpreterFor (Output (Maybe TokenSet)) r
 runWriteTokens = interpret $ \case
