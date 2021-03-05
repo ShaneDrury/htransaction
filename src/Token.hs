@@ -15,6 +15,7 @@ module Token
   )
 where
 
+import Control.Monad (void)
 import Data.Maybe
 import Data.Time
 import Db
@@ -93,8 +94,7 @@ runWriteTokens = interpret $ \case
     Nothing -> return ()
     Just tokens -> do
       info "Writing tokens"
-      institution <- getInstitution
-      updateTokens institution tokens
+      void $ upsertTokens tokens
 
 doSaveEndpoint :: (Members '[Input UTCTime, State (Maybe TokenSet), Input BankAccount] r) => TokenEndpoint -> Sem r ()
 doSaveEndpoint endpoint = do

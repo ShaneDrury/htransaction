@@ -24,7 +24,7 @@ module Db
     getTokensByInstitution,
     TokenSetId,
     ClientId,
-    updateTokens,
+    upsertTokens,
     getClient,
   )
 where
@@ -63,12 +63,14 @@ TokenSet
     refreshToken RefreshToken
     expiresAt UTCTime
     institution BankInstitution
+    UniqueTokenSetInstitution institution
     deriving Eq Show
 
 Client
     identifier Text
     secret Text
     institution BankInstitution
+    UniqueClientInstitution institution
     deriving Eq Show
 |]
 
@@ -78,7 +80,7 @@ data DbM m a where
   GetAccount :: Text -> DbM m (Maybe BankAccount)
   UpdateLastImported :: Text -> LastImported -> DbM m ()
   GetTokensByInstitution :: BankInstitution -> DbM m (Maybe TokenSet)
-  UpdateTokens :: BankInstitution -> TokenSet -> DbM m ()
+  UpsertTokens :: TokenSet -> DbM m TokenSet
   GetClient :: BankInstitution -> DbM m (Maybe Client)
 
 $(makeSem ''DbM)
@@ -97,15 +99,8 @@ updateLastImported_ baid lastImported = update $ \ba -> do
 getTokensByInstitution_ :: BankInstitution -> SqlPersistM (Maybe (Entity TokenSet))
 getTokensByInstitution_ institution = selectFirst [TokenSetInstitution P.==. institution] []
 
-updateTokens_ :: BankInstitution -> TokenSet -> SqlPersistM ()
-updateTokens_ institution TokenSet {..} = update $ \tokenset -> do
-  set
-    tokenset
-    [ TokenSetAccessToken =. val tokenSetAccessToken,
-      TokenSetRefreshToken =. val tokenSetRefreshToken,
-      TokenSetExpiresAt =. val tokenSetExpiresAt
-    ]
-  where_ (tokenset ^. TokenSetInstitution ==. val institution)
+updateTokens_ :: TokenSet -> SqlPersistM (Entity TokenSet)
+updateTokens_ tokenSet = upsert tokenSet []
 
 runDbMOnSqlite :: (Members '[Embed IO] r) => FilePath -> InterpreterFor DbM r
 runDbMOnSqlite fp = interpret $ \case
@@ -122,7 +117,10 @@ runDbMOnSqlite fp = interpret $ \case
     P.runSqlite (pack fp) $ do
       results <- getTokensByInstitution_ institution
       return $ entityVal <$> results
-  UpdateTokens institution tokens -> embed $ P.runSqlite (pack fp) $ updateTokens_ institution tokens
+  UpsertTokens tokens -> embed $
+    P.runSqlite (pack fp) $ do
+      r <- updateTokens_ tokens
+      return $ entityVal r
   GetClient institution -> embed $
     P.runSqlite (pack fp) $ do
       result <- selectFirst [ClientInstitution P.==. institution] []
