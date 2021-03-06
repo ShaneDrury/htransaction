@@ -17,6 +17,7 @@ import qualified Monzo as MZ
 import qualified Network.HTTP.Req as H
 import Polysemy
 import Polysemy.Cached
+import Polysemy.Db
 import Polysemy.Error
 import Polysemy.Http
 import Polysemy.Input

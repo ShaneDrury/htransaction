@@ -13,6 +13,7 @@ import Data.Time
 import Db
 import Logger
 import Polysemy
+import Polysemy.Db
 import Polysemy.Input
 import Polysemy.Output
 import Types

@@ -10,33 +10,30 @@ module Db
   ( MonzoTransaction (..),
     migrateAll,
     MonzoTransactionId,
-    DbM (..),
-    runDbMOnSqlite,
-    findByUuid,
-    insertUnique,
-    runMigrations,
-    getAccount,
     BankAccountId,
     BankAccount (..),
-    updateLastImported,
     Client (..),
     TokenSet (..),
-    getTokensByInstitution,
     TokenSetId,
     ClientId,
-    upsertTokens,
-    getClient,
+    EntityField
+      ( MonzoTransactionUuid,
+        BankAccountReference,
+        BankAccountLastImported,
+        TokenSetInstitution,
+        ClientInstitution
+      ),
   )
 where
 
 import Data.Text
 import Data.Time.Clock
 import Database.Esqueleto.Experimental hiding (get, insertUnique)
-import qualified Database.Persist.Sqlite as P
 import Database.Persist.TH
-import Polysemy
 import Types
 import Prelude
+
+-- todo: Fix types of fields
 
 share
   [mkPersist sqlSettings, mkMigrate "migrateAll"]
@@ -73,57 +70,3 @@ Client
     UniqueClientInstitution institution
     deriving Eq Show
 |]
-
-data DbM m a where
-  FindByUuid :: Text -> DbM m (Maybe MonzoTransaction)
-  InsertUnique :: MonzoTransaction -> DbM m (Maybe (Key MonzoTransaction))
-  GetAccount :: Text -> DbM m (Maybe BankAccount)
-  UpdateLastImported :: Text -> LastImported -> DbM m ()
-  GetTokensByInstitution :: BankInstitution -> DbM m (Maybe TokenSet)
-  UpsertTokens :: TokenSet -> DbM m TokenSet
-  GetClient :: BankInstitution -> DbM m (Maybe Client)
-
-$(makeSem ''DbM)
-
-findByUuid_ :: Text -> SqlPersistM (Maybe (Entity MonzoTransaction))
-findByUuid_ uuid = selectFirst [MonzoTransactionUuid P.==. uuid] []
-
-accountByReference :: Text -> SqlPersistM (Maybe (Entity BankAccount))
-accountByReference ref = selectFirst [BankAccountReference P.==. ref] []
-
-updateLastImported_ :: Text -> LastImported -> SqlPersistM ()
-updateLastImported_ baid lastImported = update $ \ba -> do
-  set ba [BankAccountLastImported =. val lastImported]
-  where_ (ba ^. BankAccountReference ==. val baid)
-
-getTokensByInstitution_ :: BankInstitution -> SqlPersistM (Maybe (Entity TokenSet))
-getTokensByInstitution_ institution = selectFirst [TokenSetInstitution P.==. institution] []
-
-updateTokens_ :: TokenSet -> SqlPersistM (Entity TokenSet)
-updateTokens_ tokenSet = upsert tokenSet []
-
-runDbMOnSqlite :: (Members '[Embed IO] r) => FilePath -> InterpreterFor DbM r
-runDbMOnSqlite fp = interpret $ \case
-  FindByUuid uuid -> runQ $ do
-    r <- findByUuid_ uuid
-    return $ entityVal <$> r
-  InsertUnique tx -> runQ (P.insertUnique tx)
-  GetAccount ref -> runQ $ do
-    account <- accountByReference ref
-    return $ entityVal <$> account
-  UpdateLastImported bankAccountId lastImported -> runQ $ updateLastImported_ bankAccountId lastImported
-  GetTokensByInstitution institution -> runQ $ do
-    results <- getTokensByInstitution_ institution
-    return $ entityVal <$> results
-  UpsertTokens tokens -> runQ $ do
-    r <- updateTokens_ tokens
-    return $ entityVal r
-  GetClient institution -> runQ $ do
-    result <- selectFirst [ClientInstitution P.==. institution] []
-    return $ entityVal <$> result
-  where
-    runQ :: Members '[Embed IO] r => SqlPersistM a -> Sem r a
-    runQ qry = embed $ P.runSqlite (pack fp) qry
-
-runMigrations :: (Members '[Embed IO] r) => FilePath -> Sem r ()
-runMigrations fp = embed $ P.runSqlite (pack fp) (runMigration migrateAll)

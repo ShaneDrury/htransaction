@@ -10,6 +10,7 @@ import Data.Maybe
 import Data.Text
 import Db
 import Polysemy
+import Polysemy.Db
 import Polysemy.Input
 import Types
 import Prelude

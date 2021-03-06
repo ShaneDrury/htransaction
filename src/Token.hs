@@ -22,6 +22,7 @@ import Db
 import Logger
 import Polysemy
 import Polysemy.BankAccount
+import Polysemy.Db
 import Polysemy.Input
 import Polysemy.OAuth
 import Polysemy.Output

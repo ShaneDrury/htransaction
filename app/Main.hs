@@ -7,8 +7,9 @@ import Api
 import App
 import Cli
 import Control.Monad
-import qualified Db as DB
+import Db
 import Fa
+import Interpretation.Db
 import Interpretation.Http
 import Interpretation.OAuth
 import Logger
@@ -33,12 +34,12 @@ runapp args@Args {..} institution =
       . handleErrors
       . runLoggerOnRainbow
       . runInputConst args
-      . DB.runDbMOnSqlite dbFile
+      . runDbMOnSqlite dbFile
       . runBankAccountsMOnDb
       . runGetTime
       . runGetTokens
       . runWriteTokens
-      . runStateCached @(Maybe DB.TokenSet)
+      . runStateCached @(Maybe TokenSet)
       . runPersistLastImportedM
       . runRandomROnIO
       . runHttpMOnReq @TokenEndpoint
@@ -69,7 +70,7 @@ getInstitutionStatic :: Args -> IO BankInstitution
 getInstitutionStatic args@Args {..} =
   ( runM
       . runInputConst args
-      . DB.runDbMOnSqlite dbFile
+      . runDbMOnSqlite dbFile
       . runBankAccountsMOnDb
   )
     getInstitution
@@ -77,7 +78,7 @@ getInstitutionStatic args@Args {..} =
 main :: IO ()
 main = do
   options <- getArgs
-  runM (DB.runMigrations (dbFile options))
+  runM (runMigrations (dbFile options))
   institution <- getInstitutionStatic options
   result <- runapp options institution
   case result of

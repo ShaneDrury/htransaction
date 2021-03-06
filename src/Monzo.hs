@@ -27,6 +27,7 @@ import qualified Db as DB
 import GHC.Generics (Generic)
 import Network.HTTP.Req
 import Polysemy
+import qualified Polysemy.Db as DB
 import Polysemy.Error
 import Polysemy.Http
 import Polysemy.Output
