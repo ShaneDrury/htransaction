@@ -31,10 +31,9 @@ import Polysemy.Error
 import Prelude hiding (log)
 
 newtype LastImported = LastImported Day
-  deriving stock (Eq, Show, Read, Generic)
+  deriving stock (Eq, Show, Generic)
   deriving anyclass (FromJSON, ToJSON)
-
-derivePersistField "LastImported"
+  deriving (PersistField, PersistFieldSql) via Day
 
 newtype ApiError = Unauthorized H.HttpException deriving stock (Show)
 

@@ -33,8 +33,6 @@ import Database.Persist.TH
 import Types
 import Prelude
 
--- todo: Fix types of fields
-
 share
   [mkPersist sqlSettings, mkMigrate "migrateAll"]
   [persistLowerCase|
