@@ -28,10 +28,13 @@ getTokensByInstitution_ :: BankInstitution -> SqlPersistM (Maybe (Entity TokenSe
 getTokensByInstitution_ institution = selectFirst [TokenSetInstitution P.==. institution] []
 
 updateTokens_ :: TokenSet -> SqlPersistM (Entity TokenSet)
-updateTokens_ tokenSet = upsert tokenSet []
-
--- todo maybe interpret each of these as input/output
--- most things don't need all of DbM
+updateTokens_ tokenSet@TokenSet {..} =
+  upsert
+    tokenSet
+    [ TokenSetAccessToken P.=. tokenSetAccessToken,
+      TokenSetRefreshToken P.=. tokenSetRefreshToken,
+      TokenSetExpiresAt P.=. tokenSetExpiresAt
+    ]
 
 runDbMOnSqlite :: (Members '[Embed IO] r) => FilePath -> InterpreterFor DbM r
 runDbMOnSqlite fp = interpret $ \case

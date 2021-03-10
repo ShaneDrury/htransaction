@@ -48,7 +48,7 @@ runDbEmpty = interpret $ \case
   GetAccount _ -> return Nothing
   UpdateLastImported _ _ -> return ()
   GetTokensByInstitution _ -> return Nothing
-  UpsertTokens _ -> return testTokens
+  UpsertTokens tkns -> return tkns
   GetClient _ -> return Nothing
 
 runAppEmpty :: ([LogMsg], ())

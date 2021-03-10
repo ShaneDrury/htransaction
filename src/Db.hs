@@ -21,6 +21,9 @@ module Db
         BankAccountReference,
         BankAccountLastImported,
         TokenSetInstitution,
+        TokenSetAccessToken,
+        TokenSetRefreshToken,
+        TokenSetExpiresAt,
         ClientInstitution
       ),
   )
