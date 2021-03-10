@@ -19,7 +19,7 @@ data RandomM m a where
 $(makeSem ''RandomM)
 
 randomASCII :: IO Char
-randomASCII = getStdRandom $ randomR (chr 48, chr 122)
+randomASCII = getStdRandom $ randomR (chr 97, chr 122)
 
 runRandomROnIO :: (Members '[Embed IO] r) => InterpreterFor RandomM r
 runRandomROnIO = interpret $ \case
